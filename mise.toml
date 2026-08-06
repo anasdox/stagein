@@ -84,3 +84,7 @@ run = "ssh ${NORNS:-we@norns.local} 'tail -f ~/dust/data/stagein/bridge.log'"
 [tasks."norns:config"]
 description = "Edit the device's relay URL and token"
 run = "ssh -t ${NORNS:-we@norns.local} 'nano ~/dust/data/stagein/config.json'"
+
+[tasks.demo]
+description = "Play a scripted performance against the running stack"
+run = "node scripts/demo.mjs"

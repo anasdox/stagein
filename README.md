@@ -24,8 +24,15 @@ Then, in another terminal:
 
 ```bash
 mise run urls         # prints every URL, including the host token
+mise run demo         # plays the whole ritual, narrated
 mise run smoke        # 43 acceptance checks against the running stack
 ```
+
+`mise run demo` is the fastest way to see what this is: it opens registrations,
+brings six phones into the lottery, arms the device, draws a winner, plays three gestures through the
+pad, cuts it with the kill switch, and returns to the safe values — narrating each beat and drawing
+the Norns screen in the terminal. Open the stage view and the Norns panel first and it plays in the
+browser too; `--lead 15` waits fifteen seconds so you have time.
 
 | Surface | URL | Who |
 | --- | --- | --- |
@@ -85,8 +92,9 @@ PUBLIC_BASE_URL=http://192.168.1.42:8080 mise run up
                               │ WS, dialled *outbound* by the device
                               ▼
               ┌──────────────────────────────────────┐
-              │  Norns  (packages/norns-sim)         │
-              │  Lua 5.4 running lua/stagein.lua     │
+              │  Norns                               │
+              │  Lua 5.4 running                     │
+              │  packages/norns-script/lib/engine.lua│
               │  clamp · slew · map · kill · screen  │
               └───────────────┬──────────────────────┘
                               ▼
@@ -372,6 +380,7 @@ edited from the host console or the encoders, and are clamped server-side to the
 | `mise run dev` | relay + simulator locally, prefixed output, watch mode |
 | `mise run relay` / `norns` | one at a time |
 | `mise run build` / `typecheck` / `clean` | TypeScript |
+| `mise run demo` | play a scripted performance against the running stack |
 | `mise run smoke` | the acceptance check |
 | `mise run urls` | demo URLs and LAN hints |
 | `mise run norns:package` | build the device bundle into `dist/norns` |
