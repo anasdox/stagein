@@ -475,8 +475,14 @@ local function fmt_secs(ms)
   return string.format('%.0fs', math.max(0, ms) / 1000)
 end
 
+--- Pad geometry. Kept clear of the bottom status row: an 8 px glyph on a y=62
+--- baseline covers y 56..62, so the box has to stop above that or the ARMED /
+--- rejected line becomes unreadable — and that line is the one that matters
+--- from a stage (PRD §12).
+local PAD = { x = 2, y = 28, size = 26 }
+
 local function draw_pad()
-  local x0, y0, size = 4, 30, 30
+  local x0, y0, size = PAD.x, PAD.y, PAD.size
   screen.level(3)
   screen.rect(x0, y0, size, size)
   screen.stroke()
@@ -516,7 +522,7 @@ local function draw_main()
   screen.text_right(string.format('%d/%d', s.entrants, s.connected))
 
   screen.level(8)
-  screen.move(0, 27)
+  screen.move(0, 26)
   if s.session_state == 'DRAWING' then
     screen.text('drawing ' .. fmt_secs(s.countdown_ms))
   elseif s.winner then
@@ -527,13 +533,15 @@ local function draw_main()
 
   draw_pad()
 
+  -- Right of the pad, so nothing overlaps it.
+  local text_x = PAD.x + PAD.size + 8
   screen.level(12)
-  screen.move(40, 38)
+  screen.move(text_x, 36)
   screen.text(string.format('%s %d:%03d', cfg.x.name, cfg.x.cc, math.max(0, s.cc_x)))
-  screen.move(40, 48)
+  screen.move(text_x, 46)
   screen.text(string.format('%s %d:%03d', cfg.y.name, cfg.y.cc, math.max(0, s.cc_y)))
   screen.level(4)
-  screen.move(40, 58)
+  screen.move(text_x, 54)
   screen.text(string.format('%ds  %d%%', math.floor(cfg.control_ms / 1000), params:get('intensity')))
 
   -- Arm/kill banner: the one thing that must be readable from a stage.
