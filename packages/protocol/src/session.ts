@@ -83,6 +83,11 @@ export interface SessionConfig {
   padStart: 'center' | 'safe' | 'last';
   /** PRD §8: end of session behaviour. */
   endBehavior: 'return-safe' | 'hold';
+  /**
+   * Hide participant names from the public view. The operator's backstop for
+   * anything the name filter lets through, mid-set, without a restart.
+   */
+  hideNames: boolean;
   /** Preset label, selected with E1 on the Norns. */
   preset: string;
   macros: { x: MacroConfig; y: MacroConfig };
@@ -116,6 +121,7 @@ export function defaultConfig(): SessionConfig {
     winnerCanRewin: false,
     padStart: 'center',
     endBehavior: 'return-safe',
+    hideNames: false,
     preset: 'filter+delay',
     macros: {
       x: {

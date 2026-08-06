@@ -178,7 +178,7 @@
             : 'norns absent';
 
         // Only rebuild the DOM when the shape of the display actually changes.
-        const shape = `${s.state}|${s.winnerPseudo || ''}|${s.entrants}|${s.endReason || ''}`;
+        const shape = `${s.state}|${s.winnerPseudo || ''}|${s.entrants}|${s.endReason || ''}|${s.namesHidden}`;
         if (!previous || shape !== renderShape) {
           renderShape = shape;
           bodyEl.innerHTML = body(s);

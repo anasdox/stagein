@@ -221,6 +221,9 @@ function handleHost(ws: WebSocket, session: LiveSession, bucket: TokenBucket): v
       case 'block':
         session.block(msg.clientId);
         break;
+      case 'hideNames':
+        session.setHideNames(msg.hidden);
+        break;
       case 'rotate':
         session.rotateJoinKey();
         break;
@@ -313,8 +316,14 @@ function handleNorns(ws: WebSocket, session: LiveSession, bucket: TokenBucket): 
 
 function handleStage(ws: WebSocket, session: LiveSession): void {
   session.attachStage(ws);
-  // A view-only surface accepts nothing; anything sent is a protocol error.
-  ws.on('message', () => ws.close(4400, 'read-only endpoint'));
+  // View-only, with one exception: the relay heartbeats this socket, so a
+  // correct client answers `pong`. Closing on that would disconnect exactly the
+  // clients that behave — a projector dropping mid-set every heartbeat.
+  ws.on('message', (raw) => {
+    const frame = parseFrame(raw as Buffer);
+    if (frame.ok && frame.value.t === 'pong') return;
+    ws.close(4400, 'read-only endpoint');
+  });
   ws.on('close', () => session.detachStage(ws));
   ws.on('error', (err) => log.warn('stage socket error', err));
 }

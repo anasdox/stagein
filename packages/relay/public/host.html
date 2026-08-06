@@ -222,6 +222,10 @@
 
             <div class="card">
               <h2>Participants</h2>
+              <div class="row" style="justify-content: space-between; margin-bottom: 10px">
+                <span class="muted" style="font-size: 12px">Pseudos sur la vue publique</span>
+                <button id="hideNames" class="ghost" style="padding: 4px 10px; font-size: 12px">—</button>
+              </div>
               <div id="people"></div>
             </div>
           </div>
@@ -503,6 +507,8 @@
         el('btnRevoke').disabled = s.state !== 'ACTIVE' && s.state !== 'AWARDED';
         el('btnUnkill').disabled = !s.killed;
         el('btnKill').disabled = s.killed;
+        el('hideNames').textContent = s.namesHidden ? 'masqués' : 'visibles';
+        el('hideNames').className = s.namesHidden ? 'danger' : 'ghost';
 
         renderConfig(s.config);
         renderNorns(s);
@@ -601,6 +607,9 @@
       el('btnUnkill').onclick = () => send({ t: 'unkill' });
       el('btnReset').onclick = () => {
         if (confirm('Réinitialiser la session ? Le contrôle en cours sera coupé.')) send({ t: 'reset' });
+      };
+      el('hideNames').onclick = () => {
+        if (state) send({ t: 'hideNames', hidden: !state.namesHidden });
       };
       el('rotate').onclick = () => {
         if (confirm('Régénérer le lien ? Le QR code affiché deviendra invalide.')) send({ t: 'rotate' });

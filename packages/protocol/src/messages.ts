@@ -29,6 +29,8 @@ export interface PublicState {
   nornsOnline: boolean;
   nornsArmed: boolean;
   killed: boolean;
+  /** Host has hidden participant names from the public view. */
+  namesHidden: boolean;
   preset: string;
   macroNames: { x: string; y: string };
   endReason: EndReason | null;
@@ -118,6 +120,11 @@ export type ParticipantIn =
 export type ParticipantOut =
   | { t: 'welcome'; clientId: string; pseudo: string; entered: boolean; state: PublicState }
   | { t: 'state'; state: PublicState }
+  /**
+   * The name actually in force. Sent when the relay changes it — a moderated
+   * name is substituted rather than refused, so the phone has to be told.
+   */
+  | { t: 'pseudo'; pseudo: string; substituted: boolean }
   /** You won. Vibrate, show the pad, wait for `activate`. */
   | {
       t: 'won';
@@ -150,6 +157,8 @@ export type HostIn =
   | { t: 'unkill' }
   | { t: 'config'; patch: Record<string, unknown> }
   | { t: 'block'; clientId: string }
+  /** Panic control for the projected view: hide every participant name. */
+  | { t: 'hideNames'; hidden: boolean }
   /** Invalidate the join URL and regenerate the QR (PRD §11). */
   | { t: 'rotate' }
   | { t: 'pong'; id: number; ts: number };

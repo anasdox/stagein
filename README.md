@@ -268,11 +268,11 @@ the credential.
 
 ## Acceptance
 
-Three suites, 82 checks. Each covers a layer the others cannot reach:
+Three suites, 92 checks. Each covers a layer the others cannot reach:
 
 | Suite | Checks | Needs | Covers |
 | --- | --- | --- | --- |
-| `mise run smoke` | 45 | running stack | the product: PRD §14 criteria, end to end |
+| `mise run smoke` | 55 | running stack | the product: PRD §14 criteria, end to end |
 | `mise run norns:check` | 26 | nothing | the bundle is complete, parses, and boots |
 | `mise run norns:bridge-test` | 11 | running relay | the device's OSC↔WebSocket transport |
 
@@ -283,7 +283,7 @@ real Lua script through its front panel — and checks the MVP criteria of PRD �
 0 · stack reachable                              3 checks
 1 · host console (FR-01, FR-02, FR-14)           5
 2 · Norns arming gate (FR-12)                    2
-3 · lottery (FR-03…FR-06)                        7
+3 · lottery, names, moderation (FR-03…FR-06)     17
 4 · authorisation (FR-07, §11)                   3
 5 · gesture → MIDI CC (FR-09…FR-11, NFR-01)      8
 5b · the device enforces its own limits (NFR-07) 3
@@ -291,7 +291,7 @@ real Lua script through its front panel — and checks the MVP criteria of PRD �
 7 · automatic expiry (FR-08)                     4
 8 · disconnection (FR-13, §16)                   2
 9 · stack left usable                            1
-                                                45 checks
+                                                55 checks
 ```
 
 It asserts, among other things: exactly one winner is drawn; only the winner's token works; a
@@ -403,6 +403,10 @@ Known gaps to close before a public pilot (**P2**):
 - **Nothing is committed and there is no CI.** Every verification above is run by hand. Until they run
   on a pipeline against a tagged revision, "it passed" is a statement about one laptop at one moment.
   This is the largest remaining deployment risk, and it is process, not code.
+- **The name filter is a floor, not a policy.** It normalises obfuscation away and
+  covers common French and English profanity, slurs, impersonation and link-spam, but no blocklist is
+  complete. The host's *masquer les pseudos* toggle is the real backstop, and the list should be
+  reviewed by whoever is on stage.
 - **The default tokens are live defaults.** `docker compose` falls back to `dev-host-token-change-me`,
   so an operator who forgets `.env` gets a relay anyone can drive. The relay does not refuse to start
   on a placeholder token the way the Norns bridge does — it should.
@@ -431,6 +435,7 @@ hardcoded guess, so a rehearsal can settle them:
 | --- | --- | --- |
 | Can the winner re-enter the next draw? | no | `winnerCanRewin` |
 | Is a pseudonym required to join? | a stage name is assigned, editable before joining | — |
+| Are names moderated? | yes, in the relay; host can hide them all | `hideNames` |
 | Where does the pad start? | centre | `padStart` (`center` · `safe` · `last`) |
 | Which device and which CC for the pilot? | CC 74 filter, CC 91 delay, channel 1 | `macros.x` / `macros.y` |
 | Manual or automatic draw? | manual (host or K2), automatic redraw only after a no-show | `autoRedrawOnNoShow` |

@@ -143,6 +143,8 @@ export function validateHostIn(m: Record<string, unknown>): Validated<HostIn> {
       if (!clientId) return bad('bad clientId');
       return { ok: true, value: { t: 'block', clientId } };
     }
+    case 'hideNames':
+      return { ok: true, value: { t: 'hideNames', hidden: Boolean(m.hidden) } };
     case 'pong': {
       const id = num(m.id);
       const ts = num(m.ts);
@@ -272,6 +274,7 @@ export function applyConfigPatch(config: SessionConfig, patch: Record<string, un
 
   if (typeof patch.autoRedrawOnNoShow === 'boolean') next.autoRedrawOnNoShow = patch.autoRedrawOnNoShow;
   if (typeof patch.winnerCanRewin === 'boolean') next.winnerCanRewin = patch.winnerCanRewin;
+  if (typeof patch.hideNames === 'boolean') next.hideNames = patch.hideNames;
   if (patch.padStart === 'center' || patch.padStart === 'safe' || patch.padStart === 'last') {
     next.padStart = patch.padStart;
   }

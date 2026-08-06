@@ -465,6 +465,18 @@
           case 'state':
             applyState(msg.state);
             break;
+          case 'pseudo':
+            // The relay is the authority on the name. A substitution means the
+            // requested one was refused; say so without naming the rule, or the
+            // author just tries the next spelling.
+            assignedPseudo = msg.pseudo;
+            el('pseudo').value = msg.pseudo;
+            el('wPseudo').textContent = msg.pseudo;
+            try {
+              localStorage.setItem(KEY_PSEUDO, msg.pseudo);
+            } catch {}
+            if (msg.substituted) toast('Ce nom n’est pas disponible — en voici un autre.');
+            break;
           case 'ping':
             // Echoing the server's id with our own clock lets the relay work
             // out the offset, which is what makes latency measurable (NFR-01).

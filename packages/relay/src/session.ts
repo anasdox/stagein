@@ -9,6 +9,7 @@ import {
   clamp,
   defaultConfig,
   generateStageName,
+  moderateName,
   sanitizePseudo,
   type EndReason,
   type GrantView,
@@ -172,12 +173,15 @@ export class LiveSession {
       state: this.state,
       entrants: connected.filter((p) => p.entered).length,
       connected: connected.length,
-      winnerPseudo: winner ? winner.pseudo || 'sans nom' : null,
+      // Withheld at the source, not hidden in the UI: what the public socket
+      // never carries cannot end up on a projector or in a stream.
+      winnerPseudo: winner ? (this.config.hideNames ? 'un·e invité·e' : winner.pseudo || 'sans nom') : null,
       countdownMs: this.state === 'DRAWING' && this.drawEndsAt ? Math.max(0, this.drawEndsAt - now) : null,
       remainingMs: this.remainingMs(now),
       nornsOnline: this.nornsSocket !== null,
       nornsArmed: this.nornsStatus?.armed ?? false,
       killed: this.killed,
+      namesHidden: this.config.hideNames,
       preset: this.config.preset,
       macroNames: { x: this.config.macros.x.name, y: this.config.macros.y.name },
       endReason: this.state === 'ENDED' ? this.endReason : null,
@@ -220,8 +224,12 @@ export class LiveSession {
         isWinner: this.grant?.clientId === p.clientId,
       }));
 
+    const winner = this.winner();
     return {
       ...this.publicState(now),
+      // Hiding names protects the audience's screen, not the operator's: the
+      // host cannot moderate what it cannot read.
+      winnerPseudo: winner ? winner.pseudo || 'sans nom' : null,
       config: this.config,
       joinUrl: this.joinUrl,
       stageUrl: this.stageUrl,
@@ -529,7 +537,8 @@ export class LiveSession {
         clientId,
         // A device that brought no name still gets one, so the pad can be
         // claimed with a single tap and the stage always has somebody to name.
-        pseudo: pseudo || this.freshStageName(),
+        // A name it did bring is moderated before it is ever broadcast.
+        pseudo: this.vetName(pseudo),
         entered: false,
         joinedAt: now,
         lastSeenAt: now,
@@ -548,7 +557,7 @@ export class LiveSession {
       if (p.socket && p.socket !== ws) p.socket.close(4000, 'replaced by newer connection');
       p.socket = ws;
       p.disconnectedAt = null;
-      if (pseudo) p.pseudo = pseudo;
+      if (pseudo) p.pseudo = this.vetName(pseudo);
       else if (!p.pseudo) p.pseudo = this.freshStageName();
     }
     p.lastSeenAt = now;
@@ -594,6 +603,20 @@ export class LiveSession {
     };
   }
 
+  /**
+   * A name safe to project: the requested one if it passes, an assigned stage
+   * name otherwise. Used on the `hello` path, where there is no socket to
+   * answer on yet.
+   */
+  private vetName(requested: string): string {
+    if (!requested) return this.freshStageName();
+    const verdict = moderateName(requested);
+    if (!verdict.blocked) return requested;
+    const replacement = this.freshStageName();
+    this.note('warn', `name refused on join (${verdict.category}: ${verdict.reason}) — now "${replacement}"`);
+    return replacement;
+  }
+
   /** A stage name no one else in this session is already using. */
   private freshStageName(): string {
     return generateStageName([...this.participants.values()].map((p) => p.pseudo));
@@ -610,8 +633,42 @@ export class LiveSession {
     this.touch();
   }
 
-  setPseudo(p: Participant, pseudo: string): void {
-    p.pseudo = sanitizePseudo(pseudo, p.pseudo);
+  /**
+   * Apply a requested name.
+   *
+   * A blocked name is substituted with a fresh assigned one rather than
+   * refused: an explicit rejection tells the author which spelling failed, and
+   * they will find one that passes before the draw fires. The host is told, the
+   * participant only learns the name in force.
+   */
+  setPseudo(p: Participant, requested: string): void {
+    const cleaned = sanitizePseudo(requested, p.pseudo);
+    const verdict = moderateName(cleaned);
+
+    if (verdict.blocked) {
+      const replacement = this.freshStageName();
+      this.note(
+        'warn',
+        `name refused for ${p.clientId} (${verdict.category}: ${verdict.reason}) — now "${replacement}"`,
+      );
+      p.pseudo = replacement;
+      send(p.socket, { t: 'pseudo', pseudo: replacement, substituted: true } satisfies ParticipantOut);
+      this.touch();
+      return;
+    }
+
+    if (cleaned !== p.pseudo) {
+      p.pseudo = cleaned;
+      send(p.socket, { t: 'pseudo', pseudo: cleaned, substituted: false } satisfies ParticipantOut);
+      this.touch();
+    }
+  }
+
+  /** FR-15 backstop: hide every participant name from the projected view. */
+  setHideNames(hidden: boolean): void {
+    if (this.config.hideNames === hidden) return;
+    this.config.hideNames = hidden;
+    this.note('warn', hidden ? 'participant names hidden from the public view' : 'participant names shown again');
     this.touch();
   }
 

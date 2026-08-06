@@ -230,6 +230,36 @@ async function main() {
   );
   unnamed.close();
   await sleep(200);
+
+  // Moderation. The public view is a projection surface (FR-15), so the relay —
+  // not the page — has to refuse a name; a participant can send `pseudo`
+  // straight down the socket.
+  const abusive = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, 'abusive');
+  await abusive.ready;
+  abusive.send({ t: 'hello', clientId: clientId(), pseudo: '' });
+  const abusiveWelcome = await waitFor('abusive welcome', () => abusive.last('welcome'));
+  for (const attempt of ['salope', '5@l0pe', 's a l o p e', 'RAMAS', 'twitch.tv/spam']) {
+    abusive.clear();
+    abusive.send({ t: 'pseudo', pseudo: attempt });
+    const verdict = await waitFor(`"${attempt}" moderated`, () => abusive.last('pseudo'));
+    check(
+      `"${attempt}" never becomes a stage name`,
+      verdict.substituted === true && verdict.pseudo !== attempt,
+      `→ "${verdict.pseudo}"`,
+    );
+  }
+  abusive.clear();
+  abusive.send({ t: 'pseudo', pseudo: 'Dispute' });
+  await sleep(400);
+  const innocent = abusive.last('pseudo');
+  check(
+    'an innocent name that merely contains a banned substring is kept',
+    innocent !== null && innocent.substituted === false && innocent.pseudo === 'Dispute',
+    `→ "${innocent?.pseudo}"`,
+  );
+  void abusiveWelcome;
+  abusive.close();
+  await sleep(200);
   const opened = await waitFor('three entrants', () => {
     const s = host.last('state')?.state;
     return s && s.entrants === 3 ? s : null;
@@ -264,6 +294,40 @@ async function main() {
   const winner = winners[0];
   const losers = people.filter((p) => p !== winner);
   check('only the winner receives a pad token', losers.every((p) => !p.last('won')));
+
+  // The operator's backstop: names withheld at the source, not hidden in CSS.
+  const stage = new Client(`${wsBase}/ws/stage?session=${SESSION}`, 'stage');
+  await stage.ready;
+  const namedFrame = await waitFor('stage state', () => stage.last('state'));
+  check('the public view names the winner by default', namedFrame.state.winnerPseudo !== null, `"${namedFrame.state.winnerPseudo}"`);
+  const realName = namedFrame.state.winnerPseudo;
+  stage.clear();
+  host.send({ t: 'hideNames', hidden: true });
+  const hiddenFrame = await waitFor('names hidden', () => {
+    const f = stage.last('state');
+    return f?.state.namesHidden ? f : null;
+  });
+  check(
+    'hiding names keeps them off the public socket entirely',
+    hiddenFrame.state.winnerPseudo !== realName,
+    `public sees "${hiddenFrame.state.winnerPseudo}"`,
+  );
+  check(
+    'the host still sees the real name to moderate with',
+    host.last('state').state.winnerPseudo === realName,
+    `host sees "${host.last('state').state.winnerPseudo}"`,
+  );
+  host.send({ t: 'hideNames', hidden: false });
+  await waitFor('names shown again', () => stage.last('state')?.state.namesHidden === false);
+  // The stage socket is heartbeated and the client answers; it must not be
+  // dropped for that. Two heartbeat periods is enough to catch a regression.
+  await sleep(4500);
+  check(
+    'the public view survives answering heartbeats',
+    stage.ws.readyState === 1 && stage.all('ping').length > 0,
+    `${stage.all('ping').length} pings answered, socket still open`,
+  );
+  stage.close();
 
   // --- 4. authorisation ----------------------------------------------------
   section('4 · authorisation (FR-07, PRD §11)');
