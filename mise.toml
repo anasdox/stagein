@@ -49,6 +49,10 @@ run = "docker compose down -v"
 description = "Tail docker compose logs"
 run = "docker compose logs -f"
 
+[tasks."ui-check"]
+description = "Render the participant page in a DOM and assert what a person sees"
+run = "node scripts/ui-check.mjs"
+
 [tasks.smoke]
 description = "End-to-end acceptance check against a running relay"
 run = "node scripts/smoke.mjs"

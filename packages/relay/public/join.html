@@ -362,7 +362,10 @@
       // ---------------------------------------------------------------------
       const el = (id) => document.getElementById(id);
       const screens = [...document.querySelectorAll('.screen')];
-      let current = 'idle';
+      // Not 'idle': every screen starts hidden, so seeding this with the first
+      // screen's name makes the opening show('idle') a no-op and the page renders
+      // blank. Nothing is displayed until something *else* is requested.
+      let current = null;
 
       function show(name) {
         if (current === name) return;

@@ -268,11 +268,12 @@ the credential.
 
 ## Acceptance
 
-Three suites, 95 checks. Each covers a layer the others cannot reach:
+Four suites, 121 checks. Each covers a layer the others cannot reach:
 
 | Suite | Checks | Needs | Covers |
 | --- | --- | --- | --- |
 | `mise run smoke` | 58 | running stack | the product: PRD §14 criteria, end to end |
+| `mise run ui-check` | 26 | nothing | the participant page actually renders and behaves |
 | `mise run norns:check` | 26 | nothing | the bundle is complete, parses, and boots |
 | `mise run norns:bridge-test` | 11 | running relay | the device's OSC↔WebSocket transport |
 
@@ -383,6 +384,7 @@ edited from the host console or the encoders, and are clamped server-side to the
 | `mise run build` / `typecheck` / `clean` | TypeScript |
 | `mise run demo` | play a scripted performance against the running stack |
 | `mise run smoke` | the acceptance check |
+| `mise run ui-check` | render the participant page in a DOM |
 | `mise run urls` | demo URLs and LAN hints |
 | `mise run norns:package` | build the device bundle into `dist/norns` |
 | `mise run norns:check` | is the bundle deployable? (no hardware) |
@@ -422,6 +424,9 @@ Known gaps to close before a public pilot (**P2**):
   the relay is reachable from the internet.
 - **The 200-participant target is untested at scale.** The mechanism is there (per-connection rate
   limiting, one 50 ms tick per session, diff-free broadcast) but the figure is not measured.
+- **Only the participant page has DOM coverage.** The host console and the stage view are still
+  driven by nothing but hand-testing, so the class of bug `ui-check` now catches on the phone can
+  still ship on those two.
 - **Latency is measured on a LAN.** P95 came out at single-digit milliseconds here; NFR-01's 250 ms
   budget only means something over real mobile networks.
 - **`padStart: 'last'`** reads the Norns' current output, so it needs the device online to be exact.
