@@ -286,6 +286,36 @@ async function main() {
   people[0] = await joinAs('nova', novaId);
   await waitFor('nova back in the lottery', () => host.last('state')?.state.entrants === 3);
 
+  // The relay owns the entry flag. A phone that believes it is in the lottery
+  // when the relay disagrees waits for a draw that will never include it.
+  const drifting = await joinAs('drifting');
+  await waitFor('drifting entered', () => drifting.last('entry')?.entered === true);
+  check('entering is confirmed by the relay', drifting.last('entry').entered === true);
+
+  drifting.clear();
+  host.send({ t: 'reset' });
+  const cleared = await waitFor('entry revoked by reset', () => drifting.last('entry'));
+  check(
+    'a host reset tells every phone it left the lottery',
+    cleared.entered === false,
+    'otherwise the waiting screen lies and the phone is never drawn',
+  );
+
+  drifting.clear();
+  drifting.send({ t: 'enter' }); // registrations are closed after a reset
+  const refused = await waitFor('entry refused', () => drifting.last('entry'));
+  check(
+    'a refused entry is reported, not silently dropped',
+    refused.entered === false && drifting.last('error')?.code === 'bad_state',
+    `error=${drifting.last('error')?.code}`,
+  );
+  drifting.close();
+
+  host.send({ t: 'open' });
+  await waitFor('reopened for the rest of the run', () => host.last('state')?.state.state === 'OPEN');
+  for (const p of people) p.send({ t: 'enter' });
+  await waitFor('entrants restored', () => host.last('state')?.state.entrants === 3);
+
   for (const p of people) p.clear();
   host.send({ t: 'draw', countdownMs: 400 });
   await waitFor('awarded', () => host.last('state')?.state.state === 'AWARDED');

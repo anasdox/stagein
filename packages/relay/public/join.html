@@ -465,6 +465,12 @@
           case 'state':
             applyState(msg.state);
             break;
+          case 'entry':
+            // The relay decides. Trusting the local flag is how a phone ends up
+            // waiting for a draw it is not in.
+            entered = msg.entered;
+            if (publicState) applyState(publicState);
+            break;
           case 'pseudo':
             // The relay is the authority on the name. A substitution means the
             // requested one was refused; say so without naming the rule, or the

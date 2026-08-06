@@ -268,11 +268,11 @@ the credential.
 
 ## Acceptance
 
-Three suites, 92 checks. Each covers a layer the others cannot reach:
+Three suites, 95 checks. Each covers a layer the others cannot reach:
 
 | Suite | Checks | Needs | Covers |
 | --- | --- | --- | --- |
-| `mise run smoke` | 55 | running stack | the product: PRD §14 criteria, end to end |
+| `mise run smoke` | 58 | running stack | the product: PRD §14 criteria, end to end |
 | `mise run norns:check` | 26 | nothing | the bundle is complete, parses, and boots |
 | `mise run norns:bridge-test` | 11 | running relay | the device's OSC↔WebSocket transport |
 
@@ -283,7 +283,7 @@ real Lua script through its front panel — and checks the MVP criteria of PRD �
 0 · stack reachable                              3 checks
 1 · host console (FR-01, FR-02, FR-14)           5
 2 · Norns arming gate (FR-12)                    2
-3 · lottery, names, moderation (FR-03…FR-06)     17
+3 · lottery, names, moderation (FR-03…FR-06)     20
 4 · authorisation (FR-07, §11)                   3
 5 · gesture → MIDI CC (FR-09…FR-11, NFR-01)      8
 5b · the device enforces its own limits (NFR-07) 3
@@ -291,7 +291,7 @@ real Lua script through its front panel — and checks the MVP criteria of PRD �
 7 · automatic expiry (FR-08)                     4
 8 · disconnection (FR-13, §16)                   2
 9 · stack left usable                            1
-                                                55 checks
+                                                58 checks
 ```
 
 It asserts, among other things: exactly one winner is drawn; only the winner's token works; a

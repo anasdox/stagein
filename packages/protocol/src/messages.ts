@@ -125,6 +125,15 @@ export type ParticipantOut =
    * name is substituted rather than refused, so the phone has to be told.
    */
   | { t: 'pseudo'; pseudo: string; substituted: boolean }
+  /**
+   * Whether this device is in the lottery, according to the relay.
+   *
+   * Sent whenever the relay changes it — including changes the participant did
+   * not ask for, such as a host reset. Without this the phone's local flag can
+   * disagree with the server and show "you are in the lottery" to somebody who
+   * is not, and who will therefore never be drawn.
+   */
+  | { t: 'entry'; entered: boolean }
   /** You won. Vibrate, show the pad, wait for `activate`. */
   | {
       t: 'won';

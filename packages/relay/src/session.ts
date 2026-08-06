@@ -314,7 +314,7 @@ export class LiveSession {
     this.endReason = null;
     this.pendingRedraw = false;
     this.lastWinnerClientId = null;
-    for (const p of this.participants.values()) p.entered = false;
+    for (const p of this.participants.values()) this.setEntered(p, false);
     this.state = 'CLOSED';
     this.note('info', 'session reset');
     this.touch();
@@ -488,7 +488,7 @@ export class LiveSession {
     const p = this.participants.get(clientId);
     if (!p) return;
     p.blocked = true;
-    p.entered = false;
+    p.entered = false; // socket closes immediately below, so no frame to send
     send(p.socket, { t: 'error', code: 'blocked', message: 'blocked by host' } satisfies ParticipantOut);
     p.socket?.close(4003, 'blocked');
     p.socket = null;
@@ -675,19 +675,31 @@ export class LiveSession {
   enter(p: Participant): void {
     if (this.state !== 'OPEN') {
       send(p.socket, { t: 'error', code: 'bad_state', message: 'lottery is not open' } satisfies ParticipantOut);
+      // Confirm the truth anyway: a phone that thinks it is entered would
+      // otherwise sit on a waiting screen that will never come true.
+      send(p.socket, { t: 'entry', entered: p.entered } satisfies ParticipantOut);
       return;
     }
-    if (!p.entered) {
-      p.entered = true;
-      this.touch();
-    }
+    this.setEntered(p, true);
   }
 
   leave(p: Participant): void {
-    if (p.entered) {
-      p.entered = false;
-      this.touch();
-    }
+    this.setEntered(p, false);
+  }
+
+  /**
+   * Single place the entry flag changes, so the owner is always told.
+   *
+   * The relay is the authority on who is in the lottery, and it can change that
+   * without the participant acting — a host reset, or a draw they were excluded
+   * from. Any path that mutates this silently produces a phone showing a
+   * promise the relay will not keep.
+   */
+  private setEntered(p: Participant, entered: boolean): void {
+    if (p.entered === entered) return;
+    p.entered = entered;
+    send(p.socket, { t: 'entry', entered } satisfies ParticipantOut);
+    this.touch();
   }
 
   /** Record a ping/pong round trip and refine the phone's clock offset. */
