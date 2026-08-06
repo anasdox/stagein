@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StageIn — Norns simulator</title>
+    <style>
+      :root {
+        --bg: #0b0b0d;
+        --panel: #16161a;
+        --edge: #26262c;
+        --ink: #e7e7ea;
+        --dim: #85858f;
+        --accent: #ffd166;
+        --danger: #ff5c5c;
+        --ok: #6ee7a8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: 20px;
+      }
+      h1 { font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; margin: 0 0 2px; }
+      .sub { color: var(--dim); margin-bottom: 18px; font-size: 12px; }
+      .layout { display: grid; gap: 18px; grid-template-columns: minmax(0, 560px) minmax(260px, 1fr); align-items: start; }
+      @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+      .device {
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        image-rendering: pixelated;
+        background: #000;
+        border-radius: 6px;
+        border: 1px solid #000;
+      }
+      .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+      .enc, .key { background: #1e1e24; border: 1px solid var(--edge); border-radius: 10px; padding: 8px; text-align: center; }
+      .enc label, .key label { display: block; color: var(--dim); font-size: 11px; margin-bottom: 6px; letter-spacing: 0.1em; }
+      .enc .row { display: flex; gap: 6px; justify-content: center; }
+      button {
+        background: #2a2a32;
+        color: var(--ink);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+        cursor: pointer;
+        min-width: 42px;
+      }
+      button:hover { background: #35353f; }
+      button:active { background: var(--accent); color: #111; }
+      .key button { width: 100%; }
+      .key.armed button { border-color: var(--ok); }
+      .key.killed button { border-color: var(--danger); color: var(--danger); }
+      .cards { display: grid; gap: 12px; }
+      .card { background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; }
+      .card h2 { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin: 0 0 8px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      td { padding: 2px 0; }
+      td:last-child { text-align: right; color: var(--ink); }
+      td:first-child { color: var(--dim); }
+      .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; border: 1px solid var(--edge); }
+      .badge.ok { color: var(--ok); border-color: var(--ok); }
+      .badge.bad { color: var(--danger); border-color: var(--danger); }
+      .badge.warn { color: var(--accent); border-color: var(--accent); }
+      .mono { font-variant-numeric: tabular-nums; }
+      #midi, #log { max-height: 190px; overflow-y: auto; font-size: 11px; line-height: 1.6; }
+      #midi div, #log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .lvl-error { color: var(--danger); }
+      .lvl-warn { color: var(--accent); }
+      .lvl-info { color: var(--dim); }
+      .pair { display: flex; gap: 6px; margin-top: 8px; }
+      input {
+        flex: 1; min-width: 0; background: #101014; border: 1px solid var(--edge);
+        color: var(--ink); border-radius: 8px; padding: 7px 9px; font: inherit;
+      }
+      .hint { color: var(--dim); font-size: 11px; margin-top: 8px; }
+      kbd { background: #26262c; border-radius: 4px; padding: 0 4px; border: 1px solid #34343c; }
+    </style>
+  </head>
+  <body>
+    <h1>StageIn · Norns simulator</h1>
+    <div class="sub">
+      <span id="relayBadge" class="badge">connecting…</span>
+      running <span class="mono">lua/stagein.lua</span> in a Lua 5.4 interpreter
+    </div>
+
+    <div class="layout">
+      <div>
+        <div class="device">
+          <canvas id="screen" width="512" height="256"></canvas>
+          <div class="controls">
+            <div class="enc"><label>E1 preset</label><div class="row">
+              <button data-enc="1" data-delta="-1">−</button><button data-enc="1" data-delta="1">+</button>
+            </div></div>
+            <div class="enc"><label>E2 duration</label><div class="row">
+              <button data-enc="2" data-delta="-1">−</button><button data-enc="2" data-delta="1">+</button>
+            </div></div>
+            <div class="enc"><label>E3 intensity</label><div class="row">
+              <button data-enc="3" data-delta="-5">−</button><button data-enc="3" data-delta="5">+</button>
+            </div></div>
+            <div class="key"><label>K1 page</label><button data-key="1">K1</button></div>
+            <div class="key"><label>K2 open / draw</label><button data-key="2">K2</button></div>
+            <div class="key" id="k3wrap"><label id="k3label">K3 arm / kill</label><button data-key="3">K3</button></div>
+          </div>
+          <div class="hint">
+            Keys <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> · encoders
+            <kbd>q</kbd>/<kbd>w</kbd> <kbd>e</kbd>/<kbd>r</kbd> <kbd>t</kbd>/<kbd>y</kbd>
+          </div>
+        </div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <h2>Device</h2>
+          <table id="state"></table>
+          <div class="pair">
+            <input id="session" placeholder="session code" maxlength="16" />
+            <input id="token" placeholder="norns token (optional)" />
+            <button id="pair">Pair</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>MIDI out</h2>
+          <div id="midi"></div>
+        </div>
+        <div class="card">
+          <h2>Script log</h2>
+          <div id="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const SCALE = 4;
+      const canvas = document.getElementById('screen');
+      const ctx = canvas.getContext('2d');
+      const stateEl = document.getElementById('state');
+      const midiEl = document.getElementById('midi');
+      const logEl = document.getElementById('log');
+      const relayBadge = document.getElementById('relayBadge');
+      const k3wrap = document.getElementById('k3wrap');
+      const k3label = document.getElementById('k3label');
+
+      let ws = null;
+
+      function connect() {
+        ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/panel`);
+        ws.onmessage = (ev) => handle(JSON.parse(ev.data));
+        ws.onclose = () => {
+          relayBadge.textContent = 'panel disconnected';
+          relayBadge.className = 'badge bad';
+          setTimeout(connect, 1000);
+        };
+      }
+
+      function send(msg) {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+      }
+
+      // --- screen ----------------------------------------------------------
+      // Replays the display list produced by screen.* calls in stagein.lua.
+
+      const level = (l) => `rgba(255,255,255,${(Math.max(0, Math.min(15, l)) / 15).toFixed(3)})`;
+
+      function drawFrame(frame) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(SCALE, SCALE);
+
+        for (const op of frame.ops || []) {
+          const paint = level(op.level);
+          ctx.fillStyle = paint;
+          ctx.strokeStyle = paint;
+          ctx.lineWidth = Math.max(0.6, op.width || 1);
+          if (op.op === 'line' && op.pts && op.pts.length) {
+            ctx.beginPath();
+            // +0.5 puts strokes on pixel centres, as the device's 1px lines are.
+            ctx.moveTo(op.pts[0][0] + 0.5, op.pts[0][1] + 0.5);
+            for (let i = 1; i < op.pts.length; i++) ctx.lineTo(op.pts[i][0] + 0.5, op.pts[i][1] + 0.5);
+            ctx.stroke();
+          } else if (op.op === 'rect') {
+            if (op.fill) ctx.fillRect(op.x, op.y, op.w, op.h);
+            else ctx.strokeRect(op.x + 0.5, op.y + 0.5, op.w, op.h);
+          } else if (op.op === 'circle') {
+            ctx.beginPath();
+            ctx.arc(op.x, op.y, Math.max(0.5, op.r), 0, Math.PI * 2);
+            if (op.fill) ctx.fill();
+            else ctx.stroke();
+          } else if (op.op === 'text') {
+            ctx.font = `${op.size || 8}px ui-monospace, Menlo, monospace`;
+            ctx.textAlign = op.align === 'right' ? 'right' : op.align === 'center' ? 'center' : 'left';
+            ctx.fillText(op.s, op.x, op.y);
+          }
+        }
+      }
+
+      // --- panel state -----------------------------------------------------
+
+      function row(label, value) {
+        return `<tr><td>${label}</td><td class="mono">${value}</td></tr>`;
+      }
+
+      function badge(text, cls) {
+        return `<span class="badge ${cls}">${text}</span>`;
+      }
+
+      function renderState(snap) {
+        const d = snap.device || {};
+        const r = snap.relay || {};
+
+        relayBadge.textContent = r.connected ? `relay ok · ${r.session}` : `relay down${r.error ? ` · ${r.error}` : ''}`;
+        relayBadge.className = `badge ${r.connected ? 'ok' : 'bad'}`;
+
+        k3wrap.className = `key ${d.killed ? 'killed' : d.armed ? 'armed' : ''}`;
+        k3label.textContent = d.armMode === 'deadman' ? 'K3 hold = arm' : 'K3 arm / 2× kill';
+
+        const armState = d.killed
+          ? badge('KILLED', 'bad')
+          : d.armed
+            ? badge(d.authorised ? 'ARMED ▸ passing' : 'ARMED', d.authorised ? 'ok' : 'warn')
+            : badge('IDLE', '');
+
+        const x = d.x || {}, y = d.y || {};
+        stateEl.innerHTML = [
+          row('safety', armState),
+          row('session', `${d.session || '—'} · ${d.sessionState || '—'}`),
+          row('participants', `${d.entrants ?? 0} in / ${d.connected ?? 0} online`),
+          row('winner', d.winner ? `${d.winner}${d.remainingMs != null ? ` · ${Math.ceil(d.remainingMs / 1000)}s` : ''}` : '—'),
+          row('preset', `${d.preset || '—'} · ${d.intensity ?? 100}%`),
+          row('grant', d.grantId || '—'),
+          row(`${x.name || 'X'} (CC${x.cc ?? '?'})`, `${d.ccX ?? 0} <span style="color:#85858f">[${x.min ?? 0}-${x.max ?? 127}] safe ${x.safe ?? 0}</span>`),
+          row(`${y.name || 'Y'} (CC${y.cc ?? '?'})`, `${d.ccY ?? 0} <span style="color:#85858f">[${y.min ?? 0}-${y.max ?? 127}] safe ${y.safe ?? 0}</span>`),
+          row('pad target', `${fmt(d.targetX)} , ${fmt(d.targetY)}`),
+          row('pad output', `${fmt(d.outX)} , ${fmt(d.outY)}`),
+          row('frames', `${d.accepted ?? 0} accepted / ${d.rejected ?? 0} rejected`),
+          row('duration · slew', `${Math.round((d.durationMs ?? 0) / 1000)}s · ${d.slewMs ?? 0}ms`),
+          row('output', d.midiBackend || '—'),
+          row('midi messages', snap.midi ? snap.midi.count : 0),
+        ].join('');
+
+        if (snap.midi && snap.midi.recent) {
+          midiEl.innerHTML = snap.midi.recent
+            .slice()
+            .reverse()
+            .map((e) => `<div>${new Date(e.at).toISOString().slice(11, 23)} ${e.cc < 0 ? 'osc' : `ch${e.channel} CC${e.cc}`} → <b>${e.value}</b></div>`)
+            .join('');
+        }
+      }
+
+      const fmt = (v) => (typeof v === 'number' ? v.toFixed(3) : '—');
+
+      function pushLog(entry) {
+        const div = document.createElement('div');
+        div.className = `lvl-${entry.level}`;
+        div.textContent = `${new Date(entry.at).toISOString().slice(11, 19)} ${entry.message}`;
+        logEl.prepend(div);
+        while (logEl.childElementCount > 120) logEl.lastChild.remove();
+      }
+
+      function handle(msg) {
+        if (msg.t === 'screen') drawFrame(msg.frame);
+        else if (msg.t === 'snapshot') renderState(msg);
+        else if (msg.t === 'log') pushLog(msg);
+      }
+
+      // --- input -----------------------------------------------------------
+
+      for (const btn of document.querySelectorAll('[data-enc]')) {
+        btn.addEventListener('click', () =>
+          send({ t: 'enc', n: Number(btn.dataset.enc), d: Number(btn.dataset.delta) }),
+        );
+      }
+
+      for (const btn of document.querySelectorAll('[data-key]')) {
+        const n = Number(btn.dataset.key);
+        const down = (e) => { e.preventDefault(); send({ t: 'key', n, z: 1 }); };
+        const up = (e) => { e.preventDefault(); send({ t: 'key', n, z: 0 }); };
+        btn.addEventListener('mousedown', down);
+        btn.addEventListener('mouseup', up);
+        btn.addEventListener('mouseleave', (e) => { if (e.buttons) up(e); });
+        btn.addEventListener('touchstart', down, { passive: false });
+        btn.addEventListener('touchend', up, { passive: false });
+      }
+
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        send({ t: 'enc', n: 3, d: e.deltaY > 0 ? -1 : 1 });
+      }, { passive: false });
+
+      const ENC_KEYS = { q: [1, -1], w: [1, 1], e: [2, -1], r: [2, 1], t: [3, -5], y: [3, 5] };
+      const held = new Set();
+      addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        if (ENC_KEYS[e.key]) { send({ t: 'enc', n: ENC_KEYS[e.key][0], d: ENC_KEYS[e.key][1] }); return; }
+        if (['1', '2', '3'].includes(e.key) && !held.has(e.key)) { held.add(e.key); send({ t: 'key', n: Number(e.key), z: 1 }); }
+      });
+      addEventListener('keyup', (e) => {
+        if (['1', '2', '3'].includes(e.key) && held.delete(e.key)) send({ t: 'key', n: Number(e.key), z: 0 });
+      });
+
+      document.getElementById('pair').addEventListener('click', () => {
+        const session = document.getElementById('session').value.trim().toUpperCase();
+        const token = document.getElementById('token').value.trim();
+        if (session) send({ t: 'pair', session, token: token || undefined });
+      });
+
+      connect();
+    </script>
+  </body>
+</html>

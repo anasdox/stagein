@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#08080a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>StageIn</title>
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100dvh;
+        touch-action: manipulation;
+      }
+      header {
+        padding: max(14px, env(safe-area-inset-top)) 18px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+      }
+      header .brand {
+        font-size: 13px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        font-weight: 700;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 8px 18px max(18px, env(safe-area-inset-bottom));
+        min-height: 0;
+      }
+      .screen {
+        display: none;
+        flex: 1;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .screen[data-active] {
+        display: flex;
+      }
+
+      .centered {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 18px;
+        min-height: 0;
+      }
+      .big {
+        font-size: clamp(30px, 9vw, 46px);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+      }
+      .lead {
+        color: var(--dim);
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      .count {
+        font-size: clamp(64px, 24vw, 120px);
+        font-weight: 800;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.04em;
+      }
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+      footer {
+        padding: 10px 18px max(14px, env(safe-area-inset-bottom));
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--dim);
+      }
+
+      /* --- pad ------------------------------------------------------------ */
+      .pad {
+        position: relative;
+        flex: 1;
+        min-height: 44vh;
+        border-radius: 20px;
+        border: 1px solid var(--edge);
+        background:
+          radial-gradient(120% 90% at 50% 110%, rgba(124, 92, 255, 0.18), transparent 60%),
+          linear-gradient(180deg, #16161d, #0c0c10);
+        touch-action: none;
+        overflow: hidden;
+        user-select: none;
+      }
+      .pad.locked {
+        opacity: 0.45;
+      }
+      .pad .axis {
+        position: absolute;
+        background: rgba(255, 209, 102, 0.28);
+        pointer-events: none;
+      }
+      .pad .axis.v {
+        width: 1px;
+        top: 0;
+        bottom: 0;
+      }
+      .pad .axis.h {
+        height: 1px;
+        left: 0;
+        right: 0;
+      }
+      .pad .dot {
+        position: absolute;
+        width: 74px;
+        height: 74px;
+        margin: -37px 0 0 -37px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(255, 209, 102, 0.95) 0 22%, rgba(255, 209, 102, 0.16) 45%, transparent 70%);
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      .pad .hint {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--dim);
+        font-size: 15px;
+        text-align: center;
+        padding: 24px;
+        pointer-events: none;
+      }
+      .pad .label {
+        position: absolute;
+        color: var(--dim);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        pointer-events: none;
+      }
+      .pad .label.x {
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .pad .label.y {
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%) rotate(-90deg);
+        transform-origin: left center;
+      }
+      .timebar {
+        height: 6px;
+        border-radius: 999px;
+        background: var(--panel-2);
+        overflow: hidden;
+        margin-top: 12px;
+      }
+      .timebar i {
+        display: block;
+        height: 100%;
+        width: 100%;
+        background: var(--accent);
+        transform-origin: left center;
+        transition: transform 0.12s linear;
+      }
+      .timebar.low i {
+        background: var(--danger);
+      }
+      .padmeta {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: calc(18px + env(safe-area-inset-bottom));
+        transform: translateX(-50%);
+        background: var(--danger);
+        color: #180505;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        max-width: 90vw;
+        text-align: center;
+      }
+      .toast[data-show] {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="brand">StageIn</span>
+      <span class="row" style="gap: 8px">
+        <span id="conn" class="badge">…</span>
+        <span id="stateBadge" class="badge state-pill">—</span>
+      </span>
+    </header>
+
+    <main>
+      <!-- 1. join ------------------------------------------------------------>
+      <section class="screen" data-screen="idle">
+        <div class="centered">
+          <div>
+            <div class="big">Entre dans la performance.</div>
+            <p class="lead">
+              Un pseudo (facultatif), un appui, et tu es dans la loterie. Si tu es tiré·e, ton
+              téléphone devient un contrôleur pendant quelques secondes.
+            </p>
+          </div>
+          <div class="stack">
+            <div>
+              <label class="field" for="pseudo">Pseudo — facultatif</label>
+              <input id="pseudo" maxlength="20" autocomplete="off" autocapitalize="words" placeholder="anonyme" />
+            </div>
+            <button id="joinBtn" class="primary">Rejoindre la loterie</button>
+            <p class="lead" id="closedNote" style="display: none">
+              Les inscriptions sont fermées pour l'instant. Reste sur cette page&nbsp;: elle
+              s'ouvrira automatiquement.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. waiting --------------------------------------------------------->
+      <section class="screen" data-screen="waiting">
+        <div class="centered">
+          <div>
+            <div class="badge ok">Inscrit·e</div>
+            <div class="big" style="margin-top: 12px">Tu es dans la loterie.</div>
+            <p class="lead">
+              Garde cette page ouverte. Une seule personne sera tirée&nbsp;; si c'est toi, ton
+              téléphone vibrera.
+            </p>
+          </div>
+          <div class="card">
+            <h2>Session</h2>
+            <div class="row" style="justify-content: space-between">
+              <span class="muted">Participants</span><span class="mono" id="wCount">0</span>
+            </div>
+            <div class="row" style="justify-content: space-between; margin-top: 6px">
+              <span class="muted">État</span><span class="mono" id="wState">—</span>
+            </div>
+          </div>
+          <button id="leaveBtn" class="ghost">Quitter la loterie</button>
+        </div>
+      </section>
+
+      <!-- 3. drawing --------------------------------------------------------->
+      <section class="screen" data-screen="drawing">
+        <div class="centered" style="text-align: center; align-items: center">
+          <div class="lead">Tirage en cours</div>
+          <div class="count" id="drawCount">5</div>
+          <div class="lead" id="drawEntrants">—</div>
+        </div>
+      </section>
+
+      <!-- 4. won, waiting for the first touch -------------------------------->
+      <section class="screen" data-screen="won">
+        <div class="centered" style="text-align: center; align-items: center">
+          <div class="badge warn">Tu es sur scène</div>
+          <div class="big">C'est toi.</div>
+          <p class="lead">Appuie pour prendre le contrôle. <span id="wonDeadline" class="mono"></span></p>
+          <button id="startBtn" class="primary" style="font-size: 18px; padding: 18px 28px">
+            Prendre le contrôle
+          </button>
+        </div>
+      </section>
+
+      <!-- 5. active pad ------------------------------------------------------>
+      <section class="screen" data-screen="pad">
+        <div class="pad" id="pad">
+          <div class="axis v" id="axisV"></div>
+          <div class="axis h" id="axisH"></div>
+          <div class="dot" id="dot"></div>
+          <div class="hint" id="padHint">Glisse ton doigt</div>
+          <div class="label x" id="labelX">X</div>
+          <div class="label y" id="labelY">Y</div>
+        </div>
+        <div class="timebar" id="timebar"><i id="timefill"></i></div>
+        <div class="padmeta">
+          <span id="padTime" class="mono">—</span>
+          <span id="padPos" class="mono">—</span>
+        </div>
+      </section>
+
+      <!-- 6. ended ----------------------------------------------------------->
+      <section class="screen" data-screen="ended">
+        <div class="centered">
+          <div>
+            <div class="badge">Terminé</div>
+            <div class="big" style="margin-top: 12px" id="endTitle">Merci.</div>
+            <p class="lead" id="endNote">Le contrôle est revenu aux artistes.</p>
+          </div>
+          <button id="againBtn" class="primary">Rejoindre le prochain tirage</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span id="footState" class="mono">—</span>
+      <span id="footPeople" class="mono">—</span>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      // ---------------------------------------------------------------------
+      // identity: one lottery entry per device (PRD §7)
+      // ---------------------------------------------------------------------
+      const KEY_ID = 'stagein.clientId';
+      const KEY_PSEUDO = 'stagein.pseudo';
+
+      function makeClientId() {
+        const bytes = new Uint8Array(12);
+        crypto.getRandomValues(bytes);
+        return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+
+      let clientId;
+      try {
+        clientId = localStorage.getItem(KEY_ID);
+        if (!clientId) {
+          clientId = makeClientId();
+          localStorage.setItem(KEY_ID, clientId);
+        }
+      } catch {
+        clientId = makeClientId(); // private mode: identity lasts for the page
+      }
+
+      const parts = location.pathname.split('/').filter(Boolean);
+      const sessionId = (parts[1] || '').toUpperCase();
+      const joinKey = new URLSearchParams(location.search).get('k') || '';
+
+      // ---------------------------------------------------------------------
+      // dom
+      // ---------------------------------------------------------------------
+      const el = (id) => document.getElementById(id);
+      const screens = [...document.querySelectorAll('.screen')];
+      let current = 'idle';
+
+      function show(name) {
+        if (current === name) return;
+        current = name;
+        for (const s of screens) {
+          if (s.dataset.screen === name) s.setAttribute('data-active', '');
+          else s.removeAttribute('data-active');
+        }
+      }
+
+      let toastTimer = null;
+      function toast(message) {
+        const t = el('toast');
+        t.textContent = message;
+        t.setAttribute('data-show', '');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => t.removeAttribute('data-show'), 2600);
+      }
+
+      try {
+        el('pseudo').value = localStorage.getItem(KEY_PSEUDO) || '';
+      } catch {}
+
+      // ---------------------------------------------------------------------
+      // connection
+      // ---------------------------------------------------------------------
+      let ws = null;
+      let backoff = 400;
+      let entered = false;
+      let publicState = null;
+      let grant = null; // { token, grantId, durationMs, expiresAt }
+      let rateHz = 15;
+
+      function wsUrl() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        return `${proto}://${location.host}/ws/participant?session=${encodeURIComponent(sessionId)}&k=${encodeURIComponent(joinKey)}`;
+      }
+
+      function setConn(text, cls) {
+        const b = el('conn');
+        b.textContent = text;
+        b.className = `badge ${cls}`;
+      }
+
+      function connect() {
+        setConn('connexion…', '');
+        ws = new WebSocket(wsUrl());
+
+        ws.onopen = () => {
+          backoff = 400;
+          setConn('en ligne', 'ok');
+          send({ t: 'hello', clientId, pseudo: el('pseudo').value.trim() });
+          // Re-enter automatically after a reconnect, so a tunnel or a lift
+          // does not silently drop someone out of the lottery (NFR-05).
+          if (entered) send({ t: 'enter' });
+        };
+
+        ws.onmessage = (ev) => {
+          let msg;
+          try {
+            msg = JSON.parse(ev.data);
+          } catch {
+            return;
+          }
+          handle(msg);
+        };
+
+        ws.onclose = (ev) => {
+          setConn('hors ligne', 'bad');
+          if (ev.code === 4003) return toast('Accès bloqué par l’organisateur.');
+          if (ev.code === 4004) return toast('Session complète.');
+          setTimeout(connect, backoff);
+          backoff = Math.min(5000, Math.round(backoff * 1.7));
+        };
+
+        ws.onerror = () => {};
+      }
+
+      function send(msg) {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+      }
+
+      // ---------------------------------------------------------------------
+      // messages
+      // ---------------------------------------------------------------------
+      function handle(msg) {
+        switch (msg.t) {
+          case 'welcome':
+            entered = msg.entered;
+            if (msg.pseudo) el('pseudo').value = msg.pseudo;
+            applyState(msg.state);
+            break;
+          case 'state':
+            applyState(msg.state);
+            break;
+          case 'ping':
+            // Echoing the server's id with our own clock lets the relay work
+            // out the offset, which is what makes latency measurable (NFR-01).
+            send({ t: 'pong', id: msg.id, ts: Date.now() });
+            break;
+          case 'won':
+            onWon(msg);
+            break;
+          case 'active':
+            onActive(msg);
+            break;
+          case 'ended':
+            onEnded(msg.reason);
+            break;
+          case 'error':
+            onError(msg);
+            break;
+        }
+      }
+
+      function onError(msg) {
+        if (msg.code === 'rate_limited' && current === 'pad') return; // expected under the cap
+        if (msg.code === 'expired' || msg.code === 'not_authorised') {
+          if (current === 'pad') onEnded('expired');
+          return;
+        }
+        if (msg.code === 'session_full') return toast('Session complète.');
+        if (msg.code === 'blocked') return toast('Accès bloqué.');
+        if (msg.code === 'bad_state') return toast('Les inscriptions ne sont pas ouvertes.');
+      }
+
+      const STATE_LABELS = {
+        CLOSED: 'fermé',
+        OPEN: 'ouvert',
+        DRAWING: 'tirage',
+        AWARDED: 'gagnant désigné',
+        ACTIVE: 'en direct',
+        ENDED: 'terminé',
+      };
+
+      function applyState(state) {
+        publicState = state;
+        el('stateBadge').textContent = STATE_LABELS[state.state] || state.state;
+        el('stateBadge').className = `badge state-pill ${state.state === 'ACTIVE' ? 'warn' : ''}`;
+        el('footState').textContent = `${state.sessionId} · ${STATE_LABELS[state.state] || state.state}`;
+        el('footPeople').textContent = `${state.entrants} inscrit${state.entrants === 1 ? '' : 's'}`;
+        el('wCount').textContent = state.entrants;
+        el('wState').textContent = STATE_LABELS[state.state] || state.state;
+        el('drawEntrants').textContent = `${state.entrants} participant${state.entrants === 1 ? '' : 's'}`;
+        el('joinBtn').disabled = state.state !== 'OPEN';
+        el('closedNote').style.display = state.state === 'OPEN' ? 'none' : 'block';
+        if (state.macroNames) {
+          el('labelX').textContent = state.macroNames.x;
+          el('labelY').textContent = state.macroNames.y;
+        }
+
+        if (state.countdownMs != null) el('drawCount').textContent = Math.ceil(state.countdownMs / 1000);
+
+        // Screen selection follows the session state unless we hold a grant.
+        if (grant) return;
+        if (state.state === 'DRAWING' && entered) show('drawing');
+        else if (current === 'ended' || current === 'pad' || current === 'won') {
+          if (state.state === 'OPEN' && !entered) show('idle');
+        } else show(entered ? 'waiting' : 'idle');
+      }
+
+      // --- winner ----------------------------------------------------------
+
+      let deadlineTimer = null;
+
+      function onWon(msg) {
+        grant = { token: msg.grantToken, grantId: msg.grantId, durationMs: msg.durationMs, expiresAt: null };
+        pad.x = msg.pad.x;
+        pad.y = msg.pad.y;
+        el('labelX').textContent = msg.macroNames.x;
+        el('labelY').textContent = msg.macroNames.y;
+        show('won');
+        try {
+          navigator.vibrate?.([90, 70, 140]);
+        } catch {}
+
+        clearInterval(deadlineTimer);
+        deadlineTimer = setInterval(() => {
+          const left = Math.max(0, msg.activationDeadline - Date.now());
+          el('wonDeadline').textContent = `${Math.ceil(left / 1000)}s`;
+          if (left <= 0) clearInterval(deadlineTimer);
+        }, 200);
+      }
+
+      function startControl() {
+        if (!grant) return;
+        send({ t: 'activate', grantToken: grant.token });
+      }
+
+      function onActive(msg) {
+        if (!grant) return;
+        clearInterval(deadlineTimer);
+        grant.expiresAt = msg.expiresAt;
+        grant.durationMs = msg.durationMs;
+        rateHz = msg.rateHz || 15;
+        el('pad').classList.remove('locked');
+        el('padHint').style.display = '';
+        show('pad');
+        startSending();
+        try {
+          navigator.vibrate?.(40);
+        } catch {}
+      }
+
+      function onEnded(reason) {
+        grant = null;
+        stopSending();
+        clearInterval(deadlineTimer);
+        el('pad').classList.add('locked');
+        const titles = {
+          expired: 'Terminé.',
+          revoked: 'Contrôle repris.',
+          killed: 'Contrôle coupé.',
+          no_show: 'Trop tard.',
+          disconnected: 'Connexion perdue.',
+          reset: 'Session réinitialisée.',
+        };
+        const notes = {
+          expired: 'Ta fenêtre de contrôle est écoulée. Les valeurs reviennent doucement au preset.',
+          revoked: 'Les artistes ont repris le contrôle.',
+          killed: 'Arrêt d’urgence déclenché.',
+          no_show: 'Le pad n’a pas été activé à temps. Un nouveau tirage va avoir lieu.',
+          disconnected: 'Ton téléphone s’est déconnecté trop longtemps.',
+          reset: 'L’organisateur a remis la session à zéro.',
+        };
+        el('endTitle').textContent = titles[reason] || 'Terminé.';
+        el('endNote').textContent = notes[reason] || 'Le contrôle est revenu aux artistes.';
+        show('ended');
+      }
+
+      // ---------------------------------------------------------------------
+      // pad
+      // ---------------------------------------------------------------------
+      const pad = { x: 0.5, y: 0.5 }; // current finger position, normalised
+      let seq = 0;
+      let sendTimer = null;
+      let uiTimer = null;
+      let lastSent = { x: -1, y: -1 };
+      let touching = false;
+
+      const padEl = el('pad');
+
+      function padCoords(ev) {
+        const r = padEl.getBoundingClientRect();
+        const px = (ev.clientX - r.left) / r.width;
+        const py = (ev.clientY - r.top) / r.height;
+        return {
+          x: Math.min(1, Math.max(0, px)),
+          // Screen y grows downwards; musically, up should mean more.
+          y: Math.min(1, Math.max(0, 1 - py)),
+        };
+      }
+
+      function onPointer(ev) {
+        if (!grant || !grant.expiresAt) return;
+        ev.preventDefault();
+        const c = padCoords(ev);
+        pad.x = c.x;
+        pad.y = c.y;
+        el('padHint').style.display = 'none';
+        render();
+      }
+
+      padEl.addEventListener('pointerdown', (ev) => {
+        touching = true;
+        padEl.setPointerCapture?.(ev.pointerId);
+        onPointer(ev);
+      });
+      padEl.addEventListener('pointermove', (ev) => {
+        if (touching) onPointer(ev);
+      });
+      padEl.addEventListener('pointerup', () => {
+        touching = false;
+      });
+      padEl.addEventListener('pointercancel', () => {
+        touching = false;
+      });
+      padEl.addEventListener('touchmove', (ev) => ev.preventDefault(), { passive: false });
+
+      function render() {
+        const r = padEl.getBoundingClientRect();
+        const x = pad.x * r.width;
+        const y = (1 - pad.y) * r.height;
+        el('dot').style.transform = `translate(${x}px, ${y}px)`;
+        el('axisV').style.left = `${x}px`;
+        el('axisH').style.top = `${y}px`;
+        el('padPos').textContent = `${pad.x.toFixed(2)} · ${pad.y.toFixed(2)}`;
+      }
+
+      function startSending() {
+        stopSending();
+        seq = 0;
+        lastSent = { x: -1, y: -1 };
+        // FR-09 / §8: capped at the configured rate, and only when it moved.
+        sendTimer = setInterval(() => {
+          if (!grant || !grant.expiresAt) return;
+          const dx = Math.abs(pad.x - lastSent.x);
+          const dy = Math.abs(pad.y - lastSent.y);
+          if (dx < 0.002 && dy < 0.002) return;
+          lastSent = { x: pad.x, y: pad.y };
+          seq += 1;
+          send({
+            t: 'xy',
+            grantToken: grant.token,
+            x: Number(pad.x.toFixed(4)),
+            y: Number(pad.y.toFixed(4)),
+            seq,
+            ts: Date.now(),
+          });
+        }, Math.round(1000 / rateHz));
+
+        uiTimer = setInterval(() => {
+          if (!grant || !grant.expiresAt) return;
+          const left = Math.max(0, grant.expiresAt - Date.now());
+          const frac = grant.durationMs ? left / grant.durationMs : 0;
+          el('timefill').style.transform = `scaleX(${frac})`;
+          el('timebar').classList.toggle('low', left < 5000);
+          el('padTime').textContent = `${(left / 1000).toFixed(1)}s`;
+          if (left <= 0) onEnded('expired');
+        }, 100);
+        render();
+      }
+
+      function stopSending() {
+        clearInterval(sendTimer);
+        clearInterval(uiTimer);
+        sendTimer = null;
+        uiTimer = null;
+      }
+
+      // ---------------------------------------------------------------------
+      // actions
+      // ---------------------------------------------------------------------
+      el('joinBtn').addEventListener('click', () => {
+        const pseudo = el('pseudo').value.trim();
+        try {
+          localStorage.setItem(KEY_PSEUDO, pseudo);
+        } catch {}
+        entered = true;
+        send({ t: 'pseudo', pseudo });
+        send({ t: 'enter' });
+        show('waiting');
+      });
+
+      el('leaveBtn').addEventListener('click', () => {
+        entered = false;
+        send({ t: 'leave' });
+        show('idle');
+      });
+
+      el('startBtn').addEventListener('click', startControl);
+
+      el('againBtn').addEventListener('click', () => {
+        entered = true;
+        send({ t: 'enter' });
+        show(publicState && publicState.state === 'OPEN' ? 'waiting' : 'idle');
+      });
+
+      addEventListener('resize', render);
+      show('idle');
+      connect();
+    </script>
+  </body>
+</html>

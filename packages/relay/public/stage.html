@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StageIn — vue publique</title>
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      /* Sized for a projector or an OBS browser source; add ?transparent=1 to
+         drop the background so it can be keyed over a video feed (FR-15). */
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+      }
+      body.transparent {
+        background: transparent;
+      }
+      .stage {
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 2vh;
+        padding: 4vh 5vw;
+        text-align: center;
+      }
+      .brand {
+        font-size: clamp(12px, 1.6vw, 20px);
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        color: var(--dim);
+        font-weight: 700;
+      }
+      .headline {
+        font-size: clamp(34px, 8vw, 110px);
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+      .huge {
+        font-size: clamp(80px, 22vw, 280px);
+        font-weight: 800;
+        line-height: 0.9;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.05em;
+      }
+      .sub {
+        font-size: clamp(16px, 2.4vw, 32px);
+        color: var(--dim);
+      }
+      .winner {
+        color: var(--accent);
+      }
+      .bar {
+        width: min(760px, 80vw);
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        overflow: hidden;
+      }
+      .bar i {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+        transform-origin: left center;
+        transition: transform 0.15s linear;
+      }
+      .bar.low i {
+        background: var(--danger);
+      }
+      .qrbox {
+        display: flex;
+        align-items: center;
+        gap: 3vw;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .qrbox img {
+        width: clamp(140px, 18vw, 260px);
+        background: #fff;
+        border-radius: 14px;
+        padding: 10px;
+      }
+      .code {
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: clamp(28px, 5vw, 68px);
+        letter-spacing: 0.12em;
+        font-weight: 700;
+      }
+      .foot {
+        position: fixed;
+        bottom: 2vh;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        gap: 18px;
+        font-size: clamp(11px, 1.2vw, 15px);
+        color: var(--dim);
+      }
+      body.transparent .foot {
+        display: none;
+      }
+      .pulse {
+        animation: pulse 1s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.55;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pulse {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="brand">StageIn</div>
+      <div id="body"></div>
+      <div class="bar" id="bar" style="display: none"><i id="fill"></i></div>
+    </div>
+    <div class="foot">
+      <span id="fState">—</span>
+      <span id="fNorns">—</span>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      if (params.get('transparent') === '1') document.body.classList.add('transparent');
+      const showQr = params.get('qr') !== '0';
+
+      const sessionId = (location.pathname.split('/').filter(Boolean)[1] || '').toUpperCase();
+      const bodyEl = document.getElementById('body');
+      const barEl = document.getElementById('bar');
+      const fillEl = document.getElementById('fill');
+
+      let state = null;
+      let peak = null; // duration used to scale the countdown bar
+
+      function connect() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/stage?session=${encodeURIComponent(sessionId)}`);
+        ws.onmessage = (ev) => {
+          const msg = JSON.parse(ev.data);
+          if (msg.t === 'state') render(msg.state);
+        };
+        ws.onclose = () => setTimeout(connect, 1000);
+      }
+
+      function joinBlock() {
+        return `
+          <div class="qrbox">
+            ${showQr ? `<img src="/api/sessions/${sessionId}/qr.svg?v=${Date.now()}" alt="QR code" />` : ''}
+            <div>
+              <div class="headline">Scanne&nbsp;: entre en scène.</div>
+              <div class="code">${sessionId}</div>
+            </div>
+          </div>`;
+      }
+
+      function render(s) {
+        const previous = state;
+        state = s;
+
+        document.getElementById('fState').textContent = `${s.sessionId} · ${s.state} · ${s.entrants} inscrits`;
+        document.getElementById('fNorns').textContent = s.killed
+          ? 'KILL'
+          : s.nornsOnline
+            ? s.nornsArmed
+              ? 'norns armé'
+              : 'norns en ligne'
+            : 'norns absent';
+
+        // Only rebuild the DOM when the shape of the display actually changes.
+        const shape = `${s.state}|${s.winnerPseudo || ''}|${s.entrants}|${s.endReason || ''}`;
+        if (!previous || shape !== renderShape) {
+          renderShape = shape;
+          bodyEl.innerHTML = body(s);
+        }
+
+        if (s.state === 'DRAWING' && s.countdownMs != null) {
+          const countEl = document.getElementById('bigCount');
+          if (countEl) countEl.textContent = Math.ceil(s.countdownMs / 1000);
+        }
+
+        if (s.state === 'ACTIVE' && s.remainingMs != null) {
+          peak = Math.max(peak || 0, s.remainingMs);
+          barEl.style.display = 'block';
+          fillEl.style.transform = `scaleX(${(s.remainingMs / peak).toFixed(3)})`;
+          barEl.classList.toggle('low', s.remainingMs < 5000);
+          const t = document.getElementById('remain');
+          if (t) t.textContent = `${Math.ceil(s.remainingMs / 1000)}s`;
+        } else {
+          barEl.style.display = 'none';
+          if (s.state !== 'ACTIVE') peak = null;
+        }
+      }
+
+      let renderShape = null;
+
+      function body(s) {
+        switch (s.state) {
+          case 'OPEN':
+            return `
+              ${joinBlock()}
+              <div class="sub">${s.entrants} personne${s.entrants === 1 ? '' : 's'} dans la loterie</div>`;
+          case 'DRAWING':
+            return `
+              <div class="sub">Tirage</div>
+              <div class="huge" id="bigCount">—</div>
+              <div class="sub">${s.entrants} participants</div>`;
+          case 'AWARDED':
+            return `
+              <div class="sub">Sur scène</div>
+              <div class="headline winner">${escapeHtml(s.winnerPseudo || 'anonyme')}</div>
+              <div class="sub pulse">en attente du premier geste…</div>`;
+          case 'ACTIVE':
+            return `
+              <div class="sub">En direct</div>
+              <div class="headline winner">${escapeHtml(s.winnerPseudo || 'anonyme')}</div>
+              <div class="huge" id="remain">—</div>
+              <div class="sub">${escapeHtml(s.macroNames.x)} × ${escapeHtml(s.macroNames.y)}</div>`;
+          case 'ENDED':
+            return `
+              <div class="headline">Merci ${escapeHtml(s.winnerPseudo || '')}</div>
+              <div class="sub">${s.endReason === 'no_show' ? 'Nouveau tirage…' : 'Prochain tirage bientôt'}</div>`;
+          default:
+            return `
+              <div class="headline">Bientôt.</div>
+              <div class="sub">Les inscriptions ouvriront pendant le set.</div>`;
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      }
+
+      connect();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,54 @@
+name: stagein
+
+services:
+  relay:
+    build:
+      context: .
+    image: stagein:local
+    command: ["node", "packages/relay/dist/index.js"]
+    environment:
+      PORT: 8080
+      # Phones must be able to reach this host. On a LAN, override with your
+      # machine's IP (e.g. http://192.168.1.42:8080) or the QR code will point
+      # at a localhost the phone cannot resolve.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      BOOTSTRAP_SESSION_ID: ${BOOTSTRAP_SESSION_ID:-DEMO01}
+      BOOTSTRAP_HOST_TOKEN: ${BOOTSTRAP_HOST_TOKEN:-dev-host-token-change-me}
+      BOOTSTRAP_NORNS_TOKEN: ${BOOTSTRAP_NORNS_TOKEN:-dev-norns-token-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
+    restart: unless-stopped
+
+  norns:
+    build:
+      context: .
+    image: stagein:local
+    command: ["node", "packages/norns-sim/dist/index.js"]
+    environment:
+      NORNS_PORT: 8081
+      RELAY_WS_URL: ws://relay:8080/ws/norns
+      STAGEIN_SESSION: ${BOOTSTRAP_SESSION_ID:-DEMO01}
+      STAGEIN_NORNS_TOKEN: ${BOOTSTRAP_NORNS_TOKEN:-dev-norns-token-change-me}
+      ARM_MODE: ${ARM_MODE:-latch}
+      MIDI_BACKEND: ${MIDI_BACKEND:-log}
+      OSC_HOST: ${OSC_HOST:-127.0.0.1}
+      OSC_PORT: ${OSC_PORT:-57120}
+      MIDI_LOG_FILE: /data/midi.jsonl
+    volumes:
+      - midi:/data
+    ports:
+      - "${NORNS_PORT:-8081}:8081"
+    depends_on:
+      relay:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  midi:

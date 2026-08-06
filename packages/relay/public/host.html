@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StageIn — console hôte</title>
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      .top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+      .cols {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 300px minmax(0, 1fr) 320px;
+        align-items: start;
+      }
+      @media (max-width: 1080px) {
+        .cols {
+          grid-template-columns: 1fr;
+        }
+      }
+      .qr {
+        background: #fff;
+        border-radius: 12px;
+        padding: 10px;
+        display: block;
+        width: 100%;
+      }
+      .link {
+        font-size: 11px;
+        word-break: break-all;
+        color: var(--dim);
+        margin-top: 8px;
+      }
+      .bigstate {
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+      }
+      .kpi {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .kpi div {
+        background: var(--panel-2);
+        border: 1px solid var(--edge);
+        border-radius: 12px;
+        padding: 10px 12px;
+      }
+      .kpi span {
+        display: block;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      .kpi b {
+        font-size: 22px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+      }
+      .actions .wide {
+        grid-column: 1 / -1;
+      }
+      table.kv {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      table.kv td {
+        padding: 3px 0;
+      }
+      table.kv td:first-child {
+        color: var(--dim);
+      }
+      table.kv td:last-child {
+        text-align: right;
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      .cfg {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px 12px;
+      }
+      .cfg .full {
+        grid-column: 1 / -1;
+      }
+      .cfg input,
+      .cfg select {
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .cfg label.field {
+        margin-bottom: 3px;
+      }
+      #log {
+        max-height: 260px;
+        overflow-y: auto;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 11px;
+        line-height: 1.65;
+      }
+      #log div {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .lvl-warn {
+        color: var(--accent);
+      }
+      .lvl-error {
+        color: var(--danger);
+      }
+      .lvl-info {
+        color: var(--dim);
+      }
+      #people {
+        max-height: 220px;
+        overflow-y: auto;
+        font-size: 13px;
+      }
+      #people .p {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 0;
+        border-bottom: 1px solid #1e1e26;
+      }
+      #people button {
+        padding: 3px 8px;
+        font-size: 11px;
+        border-radius: 8px;
+      }
+      .padview {
+        position: relative;
+        aspect-ratio: 1;
+        border: 1px solid var(--edge);
+        border-radius: 12px;
+        background: linear-gradient(180deg, #16161d, #0c0c10);
+        overflow: hidden;
+      }
+      .padview .t,
+      .padview .o {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        margin: -7px 0 0 -7px;
+        border-radius: 50%;
+      }
+      .padview .t {
+        border: 1px solid rgba(255, 209, 102, 0.7);
+      }
+      .padview .o {
+        background: var(--accent);
+      }
+      .killbar {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .authgate {
+        max-width: 420px;
+        margin: 80px auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div id="gate" class="card authgate" style="display: none">
+        <h2>Jeton hôte requis</h2>
+        <p class="muted" style="font-size: 13px">
+          Cette console exige le jeton généré à la création de la session.
+        </p>
+        <label class="field" for="tokenInput">Jeton hôte</label>
+        <input id="tokenInput" type="password" autocomplete="off" />
+        <button class="primary" id="tokenGo" style="margin-top: 10px; width: 100%">Ouvrir la console</button>
+      </div>
+
+      <div id="app" style="display: none">
+        <div class="top">
+          <div>
+            <h1>StageIn — console</h1>
+            <div class="tagline">Join the performance. Shape the moment.</div>
+          </div>
+          <div class="row">
+            <span id="conn" class="badge">…</span>
+            <span id="nornsBadge" class="badge">norns ?</span>
+            <span id="armBadge" class="badge">—</span>
+          </div>
+        </div>
+
+        <div class="cols">
+          <!-- left: access + participants ---------------------------------->
+          <div class="grid">
+            <div class="card">
+              <h2>Rejoindre</h2>
+              <img id="qr" class="qr" alt="QR code de la session" />
+              <div class="link" id="joinLink"></div>
+              <div class="row" style="margin-top: 10px; gap: 8px">
+                <button id="copyJoin" class="ghost" style="flex: 1">Copier</button>
+                <button id="rotate" class="ghost" style="flex: 1" title="Invalide le QR code actuel">
+                  Régénérer
+                </button>
+              </div>
+              <div class="link" style="margin-top: 10px">
+                Vue publique&nbsp;: <a id="stageLink" style="color: var(--accent-2)" target="_blank">/stage</a>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Participants</h2>
+              <div id="people"></div>
+            </div>
+          </div>
+
+          <!-- middle: state + controls ------------------------------------->
+          <div class="grid">
+            <div class="card">
+              <h2>Session</h2>
+              <div class="row" style="justify-content: space-between; margin-bottom: 14px">
+                <span class="bigstate" id="bigState">—</span>
+                <span class="mono muted" id="sessionId">—</span>
+              </div>
+              <div class="kpi">
+                <div><span>Inscrits</span><b id="kEntrants">0</b></div>
+                <div><span>Connectés</span><b id="kConnected">0</b></div>
+                <div><span>Reste</span><b id="kRemaining">—</b></div>
+              </div>
+              <div class="actions" style="margin-top: 14px">
+                <button id="btnOpen">Ouvrir les inscriptions</button>
+                <button id="btnClose">Fermer</button>
+                <button id="btnDraw" class="primary">Lancer le tirage</button>
+                <button id="btnRevoke">Révoquer</button>
+                <button id="btnReset" class="ghost wide">Réinitialiser la session</button>
+              </div>
+              <div class="killbar" style="margin-top: 8px">
+                <button id="btnKill" class="danger">ARRÊT D'URGENCE</button>
+                <button id="btnUnkill" class="ghost">Réarmer</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Contrôle musical</h2>
+              <div class="cfg">
+                <div class="full">
+                  <label class="field" for="cPreset">Preset</label>
+                  <select id="cPreset" data-cfg="preset">
+                    <option value="filter+delay">filter + delay</option>
+                    <option value="filter+reverb">filter + reverb</option>
+                    <option value="texture+space">texture + space</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="field" for="cDuration">Durée (s) — 10 à 60</label>
+                  <input id="cDuration" type="number" min="10" max="60" data-cfg="controlDurationMs" data-scale="1000" />
+                </div>
+                <div>
+                  <label class="field" for="cActivation">Délai d'activation (s)</label>
+                  <input id="cActivation" type="number" min="3" max="60" data-cfg="activationTimeoutMs" data-scale="1000" />
+                </div>
+                <div>
+                  <label class="field" for="cRate">Fréquence mobile (Hz)</label>
+                  <input id="cRate" type="number" min="5" max="30" data-cfg="rateHz" />
+                </div>
+                <div>
+                  <label class="field" for="cSlew">Lissage (ms)</label>
+                  <input id="cSlew" type="number" min="50" max="2000" step="10" data-cfg="slewMs" />
+                </div>
+                <div>
+                  <label class="field" for="cMaxRate">Vitesse max (u/s)</label>
+                  <input id="cMaxRate" type="number" min="0.1" max="20" step="0.1" data-cfg="maxRatePerSec" />
+                </div>
+                <div>
+                  <label class="field" for="cEnd">Fin de session</label>
+                  <select id="cEnd" data-cfg="endBehavior">
+                    <option value="return-safe">retour valeur sûre</option>
+                    <option value="hold">maintien</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="field" for="cPadStart">Départ du pad</label>
+                  <select id="cPadStart" data-cfg="padStart">
+                    <option value="center">centre</option>
+                    <option value="safe">valeur sûre</option>
+                    <option value="last">dernière valeur</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="field" for="cRewin">Le gagnant peut rejouer</label>
+                  <select id="cRewin" data-cfg="winnerCanRewin" data-bool="1">
+                    <option value="false">non</option>
+                    <option value="true">oui</option>
+                  </select>
+                </div>
+              </div>
+
+              <h2 style="margin-top: 18px">Macros</h2>
+              <div class="cfg" id="macros">
+                <div class="full muted" style="font-size: 12px">
+                  X (horizontal) — jamais le volume master.
+                </div>
+                <div><label class="field">CC</label><input type="number" min="0" max="127" data-macro="x.cc" /></div>
+                <div><label class="field">Canal</label><input type="number" min="1" max="16" data-macro="x.channel" /></div>
+                <div><label class="field">Min</label><input type="number" min="0" max="127" data-macro="x.min" /></div>
+                <div><label class="field">Max</label><input type="number" min="0" max="127" data-macro="x.max" /></div>
+                <div><label class="field">Valeur sûre</label><input type="number" min="0" max="127" data-macro="x.safe" /></div>
+                <div>
+                  <label class="field">Inversion</label>
+                  <select data-macro="x.invert" data-bool="1"><option value="false">non</option><option value="true">oui</option></select>
+                </div>
+                <div class="full muted" style="font-size: 12px; margin-top: 6px">Y (vertical)</div>
+                <div><label class="field">CC</label><input type="number" min="0" max="127" data-macro="y.cc" /></div>
+                <div><label class="field">Canal</label><input type="number" min="1" max="16" data-macro="y.channel" /></div>
+                <div><label class="field">Min</label><input type="number" min="0" max="127" data-macro="y.min" /></div>
+                <div><label class="field">Max</label><input type="number" min="0" max="127" data-macro="y.max" /></div>
+                <div><label class="field">Valeur sûre</label><input type="number" min="0" max="127" data-macro="y.safe" /></div>
+                <div>
+                  <label class="field">Inversion</label>
+                  <select data-macro="y.invert" data-bool="1"><option value="false">non</option><option value="true">oui</option></select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- right: norns + metrics + log --------------------------------->
+          <div class="grid">
+            <div class="card">
+              <h2>Norns</h2>
+              <div class="padview" id="padview">
+                <div class="t" id="padT"></div>
+                <div class="o" id="padO"></div>
+              </div>
+              <table class="kv" style="margin-top: 12px">
+                <tr><td>état</td><td id="nState">—</td></tr>
+                <tr><td>preset</td><td id="nPreset">—</td></tr>
+                <tr><td id="nXLabel">X</td><td id="nX">—</td></tr>
+                <tr><td id="nYLabel">Y</td><td id="nY">—</td></tr>
+                <tr><td>sortie</td><td id="nBackend">—</td></tr>
+                <tr><td>refusés</td><td id="nRejected">—</td></tr>
+              </table>
+            </div>
+
+            <div class="card">
+              <h2>Latence & débit</h2>
+              <table class="kv">
+                <tr><td>P50</td><td id="mP50">—</td></tr>
+                <tr><td>P95 <span class="muted">(cible &lt; 250 ms)</span></td><td id="mP95">—</td></tr>
+                <tr><td>mesure</td><td id="mSource">—</td></tr>
+                <tr><td>événements</td><td id="mEvents">—</td></tr>
+                <tr><td>rejetés relais</td><td id="mDropped">—</td></tr>
+              </table>
+            </div>
+
+            <div class="card">
+              <h2>Journal</h2>
+              <div id="log"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const parts = location.pathname.split('/').filter(Boolean);
+      const sessionId = (parts[1] || '').toUpperCase();
+
+      // Prefer the fragment: it is never sent to the server nor written to logs.
+      function readToken() {
+        const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+        if (hash.get('t')) return hash.get('t');
+        const query = new URLSearchParams(location.search);
+        if (query.get('token')) return query.get('token');
+        try {
+          return sessionStorage.getItem(`stagein.host.${sessionId}`);
+        } catch {
+          return null;
+        }
+      }
+
+      let hostToken = readToken();
+      let ws = null;
+      let backoff = 400;
+      let state = null;
+      let dirtyFields = new Set();
+
+      if (!hostToken) {
+        el('gate').style.display = 'block';
+        el('tokenGo').addEventListener('click', () => {
+          hostToken = el('tokenInput').value.trim();
+          if (!hostToken) return;
+          try {
+            sessionStorage.setItem(`stagein.host.${sessionId}`, hostToken);
+          } catch {}
+          el('gate').style.display = 'none';
+          el('app').style.display = 'block';
+          connect();
+        });
+      } else {
+        try {
+          sessionStorage.setItem(`stagein.host.${sessionId}`, hostToken);
+        } catch {}
+        el('app').style.display = 'block';
+        connect();
+      }
+
+      function connect() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        ws = new WebSocket(`${proto}://${location.host}/ws/host?session=${encodeURIComponent(sessionId)}`);
+        ws.onopen = () => {
+          backoff = 400;
+          badge('conn', 'en ligne', 'ok');
+          send({ t: 'hello', hostToken });
+        };
+        ws.onmessage = (ev) => handle(JSON.parse(ev.data));
+        ws.onclose = (ev) => {
+          badge('conn', 'hors ligne', 'bad');
+          if (ev.code === 4401) {
+            try {
+              sessionStorage.removeItem(`stagein.host.${sessionId}`);
+            } catch {}
+            alert('Jeton hôte invalide.');
+            return;
+          }
+          setTimeout(connect, backoff);
+          backoff = Math.min(5000, Math.round(backoff * 1.7));
+        };
+      }
+
+      function send(msg) {
+        if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+      }
+
+      function badge(id, text, cls) {
+        const b = el(id);
+        b.textContent = text;
+        b.className = `badge ${cls || ''}`;
+      }
+
+      function handle(msg) {
+        if (msg.t === 'welcome' || msg.t === 'state') render(msg.state);
+        else if (msg.t === 'log') pushLog(msg);
+        else if (msg.t === 'ping') send({ t: 'pong', id: msg.id, ts: Date.now() });
+        else if (msg.t === 'error') pushLog({ at: Date.now(), level: 'error', message: `${msg.code}: ${msg.message}` });
+      }
+
+      function pushLog(entry) {
+        const div = document.createElement('div');
+        div.className = `lvl-${entry.level}`;
+        div.textContent = `${new Date(entry.at).toISOString().slice(11, 19)} ${entry.message}`;
+        el('log').prepend(div);
+        while (el('log').childElementCount > 200) el('log').lastChild.remove();
+      }
+
+      // ---------------------------------------------------------------------
+      // render
+      // ---------------------------------------------------------------------
+      let qrKey = null;
+
+      function render(s) {
+        state = s;
+        el('bigState').textContent = s.state;
+        el('sessionId').textContent = s.sessionId;
+        el('kEntrants').textContent = s.entrants;
+        el('kConnected').textContent = s.connected;
+        el('kRemaining').textContent =
+          s.state === 'DRAWING' && s.countdownMs != null
+            ? `${Math.ceil(s.countdownMs / 1000)}s`
+            : s.remainingMs != null
+              ? `${Math.ceil(s.remainingMs / 1000)}s`
+              : '—';
+
+        el('joinLink').textContent = s.joinUrl;
+        el('stageLink').href = s.stageUrl;
+        // The QR only changes when the join key is rotated.
+        if (s.joinUrl !== qrKey) {
+          qrKey = s.joinUrl;
+          el('qr').src = `/api/sessions/${s.sessionId}/qr.svg?v=${Date.now()}`;
+        }
+
+        badge('nornsBadge', s.nornsOnline ? 'norns en ligne' : 'norns absent', s.nornsOnline ? 'ok' : 'bad');
+        badge(
+          'armBadge',
+          s.killed ? 'KILL ACTIF' : s.nornsArmed ? 'ARMÉ' : 'non armé',
+          s.killed ? 'bad' : s.nornsArmed ? 'ok' : 'warn',
+        );
+
+        el('btnOpen').disabled = s.state === 'OPEN' || s.state === 'DRAWING';
+        el('btnDraw').disabled = s.state !== 'OPEN' || s.entrants === 0;
+        el('btnRevoke').disabled = s.state !== 'ACTIVE' && s.state !== 'AWARDED';
+        el('btnUnkill').disabled = !s.killed;
+        el('btnKill').disabled = s.killed;
+
+        renderConfig(s.config);
+        renderNorns(s);
+        renderMetrics(s.metrics);
+        renderPeople(s.participants, s.grant);
+      }
+
+      function renderConfig(cfg) {
+        for (const input of document.querySelectorAll('[data-cfg]')) {
+          if (dirtyFields.has(input) || document.activeElement === input) continue;
+          const key = input.dataset.cfg;
+          const scale = Number(input.dataset.scale || 1);
+          const value = cfg[key];
+          input.value = input.dataset.bool ? String(value) : typeof value === 'number' ? value / scale : value;
+        }
+        for (const input of document.querySelectorAll('[data-macro]')) {
+          if (dirtyFields.has(input) || document.activeElement === input) continue;
+          const [axis, field] = input.dataset.macro.split('.');
+          const value = cfg.macros[axis][field];
+          input.value = input.dataset.bool ? String(value) : value;
+        }
+      }
+
+      function renderNorns(s) {
+        const n = s.norns;
+        el('nXLabel').textContent = `${s.macroNames.x} (CC${s.config.macros.x.cc})`;
+        el('nYLabel').textContent = `${s.macroNames.y} (CC${s.config.macros.y.cc})`;
+        if (!n) {
+          el('nState').textContent = 'jamais connecté';
+          el('nPreset').textContent = el('nX').textContent = el('nY').textContent = '—';
+          el('nBackend').textContent = el('nRejected').textContent = '—';
+          return;
+        }
+        el('nState').textContent = !n.online ? 'déconnecté' : n.killed ? 'KILLED' : n.armed ? 'ARMED' : 'idle';
+        el('nPreset').textContent = n.preset;
+        el('nX').textContent = `${n.ccX}`;
+        el('nY').textContent = `${n.ccY}`;
+        el('nBackend').textContent = n.midiBackend;
+        el('nRejected').textContent = n.rejected;
+
+        const box = el('padview').getBoundingClientRect();
+        el('padT').style.transform = `translate(${n.targetX * box.width}px, ${(1 - n.targetY) * box.height}px)`;
+        el('padO').style.transform = `translate(${n.outX * box.width}px, ${(1 - n.outY) * box.height}px)`;
+      }
+
+      function renderMetrics(m) {
+        const fmt = (v) => (v == null ? '—' : `${Math.round(v)} ms`);
+        el('mP50').textContent = fmt(m.latencyP50);
+        el('mP95').textContent = fmt(m.latencyP95);
+        el('mP95').style.color = m.latencyP95 != null && m.latencyP95 > 250 ? 'var(--danger)' : '';
+        el('mSource').textContent = m.latencySource
+          ? `${m.latencySource} · ${m.latencySamples} éch.`
+          : 'aucune mesure';
+        el('mEvents').textContent = m.eventsIn;
+        el('mDropped').textContent = m.eventsDropped;
+      }
+
+      function renderPeople(people, grant) {
+        const box = el('people');
+        box.innerHTML = '';
+        if (people.length === 0) {
+          box.innerHTML = '<div class="muted" style="font-size:12px">Personne pour l’instant.</div>';
+          return;
+        }
+        for (const p of people) {
+          const row = document.createElement('div');
+          row.className = 'p';
+          const tags = [
+            p.connected ? '' : '<span class="badge">off</span>',
+            p.entered ? '<span class="badge ok">in</span>' : '',
+            p.isWinner ? '<span class="badge warn">gagnant</span>' : '',
+          ].join(' ');
+          row.innerHTML = `<span>${escapeHtml(p.pseudo || 'anonyme')} ${tags}</span>`;
+          const btn = document.createElement('button');
+          btn.textContent = 'bloquer';
+          btn.className = 'ghost';
+          btn.onclick = () => send({ t: 'block', clientId: p.clientId });
+          row.appendChild(btn);
+          box.appendChild(row);
+        }
+        void grant;
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      }
+
+      // ---------------------------------------------------------------------
+      // actions
+      // ---------------------------------------------------------------------
+      el('btnOpen').onclick = () => send({ t: 'open' });
+      el('btnClose').onclick = () => send({ t: 'close' });
+      el('btnDraw').onclick = () => send({ t: 'draw', countdownMs: 5000 });
+      el('btnRevoke').onclick = () => send({ t: 'revoke' });
+      el('btnKill').onclick = () => send({ t: 'kill' });
+      el('btnUnkill').onclick = () => send({ t: 'unkill' });
+      el('btnReset').onclick = () => {
+        if (confirm('Réinitialiser la session ? Le contrôle en cours sera coupé.')) send({ t: 'reset' });
+      };
+      el('rotate').onclick = () => {
+        if (confirm('Régénérer le lien ? Le QR code affiché deviendra invalide.')) send({ t: 'rotate' });
+      };
+      el('copyJoin').onclick = async () => {
+        if (!state) return;
+        try {
+          await navigator.clipboard.writeText(state.joinUrl);
+          el('copyJoin').textContent = 'Copié';
+          setTimeout(() => (el('copyJoin').textContent = 'Copier'), 1200);
+        } catch {}
+      };
+
+      // Space bar as a panic key: the fastest software stop during a set.
+      addEventListener('keydown', (ev) => {
+        if (ev.code === 'Space' && ev.target.tagName !== 'INPUT' && ev.target.tagName !== 'SELECT') {
+          ev.preventDefault();
+          send({ t: 'kill' });
+        }
+      });
+
+      // --- config editing --------------------------------------------------
+      function fieldValue(input) {
+        if (input.dataset.bool) return input.value === 'true';
+        if (input.type === 'number') return Number(input.value) * Number(input.dataset.scale || 1);
+        return input.value; // preset / endBehavior / padStart are plain strings
+      }
+
+      function pushConfig(input) {
+        const patch = {};
+        if (input.dataset.cfg) {
+          patch[input.dataset.cfg] = fieldValue(input);
+        } else if (input.dataset.macro) {
+          const [axis, field] = input.dataset.macro.split('.');
+          patch.macros = { [axis]: { [field]: fieldValue(input) } };
+        }
+        send({ t: 'config', patch });
+        dirtyFields.delete(input);
+      }
+
+      for (const input of document.querySelectorAll('[data-cfg], [data-macro]')) {
+        input.addEventListener('input', () => dirtyFields.add(input));
+        input.addEventListener('change', () => pushConfig(input));
+        input.addEventListener('blur', () => dirtyFields.delete(input));
+      }
+
+      addEventListener('resize', () => state && renderNorns(state));
+    </script>
+  </body>
+</html>

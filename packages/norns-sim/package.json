@@ -1,0 +1,23 @@
+{
+  "name": "@stagein/norns-sim",
+  "version": "0.2.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "node --watch dist/index.js"
+  },
+  "dependencies": {
+    "wasmoon": "^1.16.0",
+    "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "easymidi": "^3.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.2"
+  }
+}

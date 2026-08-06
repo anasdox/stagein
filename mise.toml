@@ -1,0 +1,86 @@
+[tools]
+node = "22"
+pnpm = "10"
+
+[env]
+_.file = { path = ".env", redact = false }
+
+[tasks.install]
+description = "Install workspace dependencies"
+run = "pnpm install"
+
+[tasks.build]
+description = "Type-check and compile every package"
+depends = ["install"]
+run = "pnpm -r build"
+
+[tasks.typecheck]
+description = "Type-check without emitting"
+run = "pnpm -r exec tsc --noEmit"
+
+[tasks.clean]
+description = "Remove build output"
+run = "rm -rf packages/*/dist packages/*/*.tsbuildinfo"
+
+[tasks.relay]
+description = "Run the relay in watch mode (http://localhost:8080)"
+depends = ["build"]
+run = "pnpm --filter @stagein/relay dev"
+
+[tasks.norns]
+description = "Run the Norns simulator (http://localhost:8081)"
+depends = ["build"]
+run = "pnpm --filter @stagein/norns-sim dev"
+
+[tasks.dev]
+description = "Run relay + Norns simulator together"
+depends = ["build"]
+run = "pnpm run dev"
+
+[tasks.up]
+description = "Start the full stack with docker compose"
+run = "docker compose up --build"
+
+[tasks.down]
+description = "Stop the docker compose stack"
+run = "docker compose down -v"
+
+[tasks.logs]
+description = "Tail docker compose logs"
+run = "docker compose logs -f"
+
+[tasks.smoke]
+description = "End-to-end acceptance check against a running relay"
+run = "node scripts/smoke.mjs"
+
+[tasks.urls]
+description = "Print the demo URLs for the bootstrap session"
+run = "node scripts/urls.mjs"
+
+# --- Norns hardware ----------------------------------------------------------
+
+[tasks."norns:package"]
+description = "Build the deployable Norns bundle into dist/norns"
+run = "node scripts/norns-package.mjs"
+
+[tasks."norns:check"]
+description = "Verify the Norns bundle is complete and deployable (no hardware needed)"
+depends = ["build"]
+run = "node scripts/norns-check.mjs"
+
+[tasks."norns:bridge-test"]
+description = "Prove the device OSC↔WebSocket transport against a running relay"
+run = "node scripts/norns-bridge-test.mjs"
+
+[tasks."norns:deploy"]
+description = "Preflight and install the script on a Norns (NORNS=we@norns.local)"
+depends = ["norns:check"]
+run = "node scripts/norns-deploy.mjs"
+
+[tasks."norns:logs"]
+description = "Tail the bridge log on the device"
+run = "ssh ${NORNS:-we@norns.local} 'tail -f ~/dust/data/stagein/bridge.log'"
+
+[tasks."norns:config"]
+description = "Edit the device's relay URL and token"
+run = "ssh -t ${NORNS:-we@norns.local} 'nano ~/dust/data/stagein/config.json'"

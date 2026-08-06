@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StageIn</title>
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      .hero {
+        max-width: 620px;
+        margin: 8vh auto 0;
+      }
+      .hero .big {
+        font-size: clamp(32px, 6vw, 54px);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        margin: 14px 0 10px;
+      }
+      .links {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+        font-size: 13px;
+      }
+      .links a {
+        color: var(--accent-2);
+        word-break: break-all;
+      }
+      code {
+        font-family: ui-monospace, Menlo, monospace;
+        background: var(--panel-2);
+        padding: 1px 6px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap hero">
+      <h1>StageIn</h1>
+      <div class="tagline">Join the performance. Shape the moment.</div>
+      <div class="big">Le public entre temporairement dans la performance.</div>
+      <p class="muted" style="font-size: 15px">
+        Crée une session, montre le QR code, lance la loterie. Une seule personne obtient un pad XY
+        pendant quelques secondes — encadré par un lissage, des plages limitées et un arrêt d'urgence.
+      </p>
+
+      <div class="card" style="margin-top: 22px">
+        <h2>Nouvelle session</h2>
+        <div class="row" style="gap: 10px">
+          <select id="preset" style="flex: 1">
+            <option value="filter+delay">filter + delay</option>
+            <option value="filter+reverb">filter + reverb</option>
+            <option value="texture+space">texture + space</option>
+          </select>
+          <button id="create" class="primary">Créer</button>
+        </div>
+        <div id="result" style="display: none; margin-top: 16px">
+          <div class="row" style="justify-content: space-between">
+            <span class="muted">Code de session</span>
+            <span class="mono" id="rid" style="font-size: 20px; font-weight: 700"></span>
+          </div>
+          <div class="links">
+            <div>Console hôte&nbsp;: <a id="rhost" target="_blank"></a></div>
+            <div>Lien participant&nbsp;: <a id="rjoin" target="_blank"></a></div>
+            <div>Vue publique&nbsp;: <a id="rstage" target="_blank"></a></div>
+          </div>
+          <div class="card" style="margin-top: 14px; background: var(--panel-2)">
+            <h2>Norns</h2>
+            <p class="muted" style="font-size: 12px; margin: 0 0 8px">
+              Appaire le Norns (ou le simulateur) avec ce jeton. Garde-le privé.
+            </p>
+            <div class="mono" id="rtoken" style="font-size: 12px; word-break: break-all"></div>
+          </div>
+          <p class="muted" style="font-size: 12px">
+            Le jeton hôte est dans le lien de la console, après <code>#t=</code>. Il n'est pas
+            récupérable ensuite&nbsp;: garde cet onglet ou copie le lien.
+          </p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 14px">
+        <h2>Session de démonstration</h2>
+        <p class="muted" style="font-size: 13px; margin: 0">
+          Le stack <code>docker compose</code> démarre une session préconfigurée et un simulateur de
+          Norns déjà appairé. Voir <code>mise run urls</code> ou le README.
+        </p>
+      </div>
+    </div>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+
+      el('create').addEventListener('click', async () => {
+        el('create').disabled = true;
+        try {
+          const res = await fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ preset: el('preset').value }),
+          });
+          if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+          const s = await res.json();
+          el('rid').textContent = s.sessionId;
+          el('rhost').textContent = s.hostUrl;
+          el('rhost').href = s.hostUrl;
+          el('rjoin').textContent = s.joinUrl;
+          el('rjoin').href = s.joinUrl;
+          el('rstage').textContent = s.stageUrl;
+          el('rstage').href = s.stageUrl;
+          el('rtoken').textContent = s.nornsToken;
+          el('result').style.display = 'block';
+        } catch (err) {
+          alert(`Création impossible : ${err.message}`);
+        } finally {
+          el('create').disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
