@@ -8,6 +8,7 @@ import {
   ccToNorm,
   clamp,
   defaultConfig,
+  generateStageName,
   sanitizePseudo,
   type EndReason,
   type GrantView,
@@ -171,7 +172,7 @@ export class LiveSession {
       state: this.state,
       entrants: connected.filter((p) => p.entered).length,
       connected: connected.length,
-      winnerPseudo: winner ? winner.pseudo || 'anonyme' : null,
+      winnerPseudo: winner ? winner.pseudo || 'sans nom' : null,
       countdownMs: this.state === 'DRAWING' && this.drawEndsAt ? Math.max(0, this.drawEndsAt - now) : null,
       remainingMs: this.remainingMs(now),
       nornsOnline: this.nornsSocket !== null,
@@ -196,7 +197,7 @@ export class LiveSession {
     return {
       grantId: this.grant.grantId,
       clientId: this.grant.clientId,
-      pseudo: winner?.pseudo || 'anonyme',
+      pseudo: winner?.pseudo || 'sans nom',
       awardedAt: this.grant.awardedAt,
       activationDeadline: this.grant.activationDeadline,
       startedAt: this.grant.startedAt,
@@ -526,7 +527,9 @@ export class LiveSession {
       }
       p = {
         clientId,
-        pseudo,
+        // A device that brought no name still gets one, so the pad can be
+        // claimed with a single tap and the stage always has somebody to name.
+        pseudo: pseudo || this.freshStageName(),
         entered: false,
         joinedAt: now,
         lastSeenAt: now,
@@ -546,6 +549,7 @@ export class LiveSession {
       p.socket = ws;
       p.disconnectedAt = null;
       if (pseudo) p.pseudo = pseudo;
+      else if (!p.pseudo) p.pseudo = this.freshStageName();
     }
     p.lastSeenAt = now;
     this.touch();
@@ -588,6 +592,11 @@ export class LiveSession {
       pad: { x: padX, y: padY },
       macroNames: { x: this.config.macros.x.name, y: this.config.macros.y.name },
     };
+  }
+
+  /** A stage name no one else in this session is already using. */
+  private freshStageName(): string {
+    return generateStageName([...this.participants.values()].map((p) => p.pseudo));
   }
 
   private burstCapacity(): number {

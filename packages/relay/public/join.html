@@ -225,8 +225,15 @@
           </div>
           <div class="stack">
             <div>
-              <label class="field" for="pseudo">Pseudo — facultatif</label>
-              <input id="pseudo" maxlength="20" autocomplete="off" autocapitalize="words" placeholder="anonyme" />
+              <label class="field" for="pseudo">Ton nom de scène — c'est ce qui s'affichera</label>
+              <input
+                id="pseudo"
+                maxlength="20"
+                autocomplete="off"
+                autocapitalize="words"
+                enterkeyhint="go"
+                placeholder="Comète 7"
+              />
             </div>
             <button id="joinBtn" class="primary">Rejoindre la loterie</button>
             <p class="lead" id="closedNote" style="display: none">
@@ -251,6 +258,9 @@
           <div class="card">
             <h2>Session</h2>
             <div class="row" style="justify-content: space-between">
+              <span class="muted">Ton nom</span><span class="mono" id="wPseudo">—</span>
+            </div>
+            <div class="row" style="justify-content: space-between; margin-top: 6px">
               <span class="muted">Participants</span><span class="mono" id="wCount">0</span>
             </div>
             <div class="row" style="justify-content: space-between; margin-top: 6px">
@@ -373,6 +383,7 @@
       }
 
       try {
+        // Empty on a first visit: the relay answers `welcome` with a name.
         el('pseudo').value = localStorage.getItem(KEY_PSEUDO) || '';
       } catch {}
 
@@ -383,6 +394,7 @@
       let backoff = 400;
       let entered = false;
       let publicState = null;
+      let assignedPseudo = '';
       let grant = null; // { token, grantId, durationMs, expiresAt }
       let rateHz = 15;
 
@@ -442,7 +454,12 @@
         switch (msg.t) {
           case 'welcome':
             entered = msg.entered;
-            if (msg.pseudo) el('pseudo').value = msg.pseudo;
+            // The relay assigns a stage name when the device brought none, so
+            // joining stays a single tap (PRD §13: median under 20 s).
+            if (msg.pseudo) {
+              assignedPseudo = msg.pseudo;
+              if (!el('pseudo').value.trim()) el('pseudo').value = msg.pseudo;
+            }
             applyState(msg.state);
             break;
           case 'state':
@@ -495,6 +512,7 @@
         el('footState').textContent = `${state.sessionId} · ${STATE_LABELS[state.state] || state.state}`;
         el('footPeople').textContent = `${state.entrants} inscrit${state.entrants === 1 ? '' : 's'}`;
         el('wCount').textContent = state.entrants;
+        el('wPseudo').textContent = el('pseudo').value.trim() || assignedPseudo || '—';
         el('wState').textContent = STATE_LABELS[state.state] || state.state;
         el('drawEntrants').textContent = `${state.entrants} participant${state.entrants === 1 ? '' : 's'}`;
         el('joinBtn').disabled = state.state !== 'OPEN';
@@ -686,15 +704,26 @@
       // ---------------------------------------------------------------------
       // actions
       // ---------------------------------------------------------------------
-      el('joinBtn').addEventListener('click', () => {
-        const pseudo = el('pseudo').value.trim();
+      function joinLottery() {
+        const typed = el('pseudo').value.trim();
+        const pseudo = typed || assignedPseudo;
+        el('pseudo').value = pseudo;
         try {
           localStorage.setItem(KEY_PSEUDO, pseudo);
         } catch {}
         entered = true;
+        // Sent before `enter`, so the name is set before the entry exists and a
+        // draw fired the same instant can still announce it.
         send({ t: 'pseudo', pseudo });
         send({ t: 'enter' });
+        el('wPseudo').textContent = pseudo;
         show('waiting');
+      }
+
+      el('joinBtn').addEventListener('click', joinLottery);
+
+      el('pseudo').addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' && !el('joinBtn').disabled) joinLottery();
       });
 
       el('leaveBtn').addEventListener('click', () => {

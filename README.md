@@ -66,7 +66,8 @@ PUBLIC_BASE_URL=http://192.168.1.42:8080 mise run up
 1. Open the **host console**. The session starts with registrations open.
 2. Open the **Norns panel** and press **K3** — the device arms. Nothing reaches the output until it
    does; that is the point.
-3. Scan the QR (or open the join link in a few browser tabs) and press *Rejoindre la loterie*.
+3. Scan the QR (or open the join link in a few browser tabs). A stage name is already filled in —
+   keep it and press *Rejoindre la loterie*, or type your own over it first.
 4. Press **Lancer le tirage**. A five-second countdown runs, then exactly one person is drawn.
 5. The winner's phone vibrates and offers *Prendre le contrôle*. They have 10 s to take it, otherwise
    the relay redraws.
@@ -267,11 +268,11 @@ the credential.
 
 ## Acceptance
 
-Three suites, 80 checks. Each covers a layer the others cannot reach:
+Three suites, 82 checks. Each covers a layer the others cannot reach:
 
 | Suite | Checks | Needs | Covers |
 | --- | --- | --- | --- |
-| `mise run smoke` | 43 | running stack | the product: PRD §14 criteria, end to end |
+| `mise run smoke` | 45 | running stack | the product: PRD §14 criteria, end to end |
 | `mise run norns:check` | 26 | nothing | the bundle is complete, parses, and boots |
 | `mise run norns:bridge-test` | 11 | running relay | the device's OSC↔WebSocket transport |
 
@@ -282,7 +283,7 @@ real Lua script through its front panel — and checks the MVP criteria of PRD �
 0 · stack reachable                              3 checks
 1 · host console (FR-01, FR-02, FR-14)           5
 2 · Norns arming gate (FR-12)                    2
-3 · lottery (FR-03…FR-06)                        5
+3 · lottery (FR-03…FR-06)                        7
 4 · authorisation (FR-07, §11)                   3
 5 · gesture → MIDI CC (FR-09…FR-11, NFR-01)      8
 5b · the device enforces its own limits (NFR-07) 3
@@ -290,7 +291,7 @@ real Lua script through its front panel — and checks the MVP criteria of PRD �
 7 · automatic expiry (FR-08)                     4
 8 · disconnection (FR-13, §16)                   2
 9 · stack left usable                            1
-                                                43 checks
+                                                45 checks
 ```
 
 It asserts, among other things: exactly one winner is drawn; only the winner's token works; a
@@ -429,6 +430,7 @@ hardcoded guess, so a rehearsal can settle them:
 | Question | Current default | Flag |
 | --- | --- | --- |
 | Can the winner re-enter the next draw? | no | `winnerCanRewin` |
+| Is a pseudonym required to join? | a stage name is assigned, editable before joining | — |
 | Where does the pad start? | centre | `padStart` (`center` · `safe` · `last`) |
 | Which device and which CC for the pilot? | CC 74 filter, CC 91 delay, channel 1 | `macros.x` / `macros.y` |
 | Manual or automatic draw? | manual (host or K2), automatic redraw only after a no-show | `autoRedrawOnNoShow` |

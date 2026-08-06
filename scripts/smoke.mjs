@@ -202,6 +202,34 @@ async function main() {
 
   const people = [];
   for (const name of ['nova', 'kilo', 'zed']) people.push(await joinAs(name));
+
+  // A phone that brings no pseudonym must still get a usable stage name: the
+  // public view has to be able to announce whoever wins (PRD §4).
+  const unnamed = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, 'unnamed');
+  await unnamed.ready;
+  unnamed.send({ t: 'hello', clientId: clientId(), pseudo: '' });
+  const assigned = await waitFor('assigned stage name', () => unnamed.last('welcome'));
+  check(
+    'a device with no pseudonym is given a stage name',
+    typeof assigned.pseudo === 'string' && assigned.pseudo.trim().length > 0 && assigned.pseudo !== 'anonyme',
+    `"${assigned.pseudo}"`,
+  );
+  const assignedNames = new Set();
+  for (let i = 0; i < 8; i++) {
+    const extra = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, `extra${i}`);
+    await extra.ready;
+    extra.send({ t: 'hello', clientId: clientId(), pseudo: '' });
+    const frame = await waitFor(`extra${i} welcome`, () => extra.last('welcome'));
+    assignedNames.add(frame.pseudo);
+    extra.close();
+  }
+  check(
+    'assigned names do not collide inside a session',
+    assignedNames.size === 8,
+    `${assignedNames.size}/8 distinct · e.g. ${[...assignedNames].slice(0, 3).join(', ')}`,
+  );
+  unnamed.close();
+  await sleep(200);
   const opened = await waitFor('three entrants', () => {
     const s = host.last('state')?.state;
     return s && s.entrants === 3 ? s : null;
