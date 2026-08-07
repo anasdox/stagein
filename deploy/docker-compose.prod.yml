@@ -1,9 +1,17 @@
 # Production stack for a public relay.
 #
-# Differences from the development compose, all of them deliberate:
+# This file describes one application and nothing else. TLS, ports 80/443, the
+# firewall and the certificates belong to the machine — see the `vps-infra`
+# repository, which runs a shared edge that routes by hostname.
 #
-#   · Caddy terminates TLS; the relay is NOT published on any host port, so the
-#     only way in is through the proxy.
+# The contract with that edge is three lines: join `edge`, declare a hostname
+# with labels, publish no ports. Adding or removing this project never touches
+# the infrastructure repository.
+#
+# Differences from the development compose, all deliberate:
+#
+#   · No ports are published. The relay is reachable through the shared edge
+#     only, which is also what lets other projects share this machine.
 #   · The Norns simulator is absent. On a public relay the real device dials in
 #     from wherever it is (PRD §11: no inbound access to the venue). Its front
 #     panel has no authentication and can arm and kill the rig — it must never
@@ -16,31 +24,27 @@
 name: stagein-prod
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      STAGEIN_DOMAIN: ${STAGEIN_DOMAIN:?set STAGEIN_DOMAIN to the public hostname}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      relay:
-        condition: service_healthy
-
   relay:
     build:
       context: ..
     image: stagein:prod
     restart: unless-stopped
     command: ["node", "packages/relay/dist/index.js"]
-    # No `ports:` on purpose — reachable only through Caddy.
+    # Visible to the shared edge, not to the internet.
     expose:
       - "8080"
+    networks:
+      - edge
+    labels:
+      caddy: ${STAGEIN_DOMAIN:?set STAGEIN_DOMAIN to the public hostname}
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      # The stage view is meant to be embedded in OBS, so framing stays open to
+      # the same origin rather than denied outright.
+      caddy.header.X-Frame-Options: SAMEORIGIN
+      caddy.header.X-Content-Type-Options: nosniff
+      caddy.header.Referrer-Policy: no-referrer
+      caddy.header.Strict-Transport-Security: max-age=31536000
+      caddy.encode: zstd gzip
     environment:
       NODE_ENV: production
       PORT: 8080
@@ -58,6 +62,6 @@ services:
       retries: 6
       start_period: 5s
 
-volumes:
-  caddy-data:
-  caddy-config:
+networks:
+  edge:
+    external: true

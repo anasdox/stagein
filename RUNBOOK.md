@@ -180,14 +180,25 @@ mise run vps:setup      # once: docker + ufw limited to 22/80/443
 mise run vps:deploy     # ship, build, start, verify over HTTPS
 ```
 
-TLS is automatic: the hostname OVH assigns resolves publicly and its reverse
-matches, so Caddy obtains a Let's Encrypt certificate on first boot. No domain to
-buy. `wss://` comes with it.
+TLS, ports 80/443 and the firewall belong to the **machine**, not to this
+project — they live in the `vps-infra` repository, which runs a shared edge so
+several projects can share one VPS. StageIn only declares the hostname it wants:
+
+```yaml
+    networks: [edge]
+    labels:
+      caddy: vps-e19f03d9.vps.ovh.net
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+```
+
+A certificate is obtained automatically for that name, and `wss://` comes with
+it. Bring the edge up first (`mise run proxy:up` in `vps-infra`), then deploy
+here.
 
 Three things differ from the laptop stack, all deliberate:
 
-- **The relay is not published on any port.** Only Caddy is; the relay is
-  reachable through the proxy alone.
+- **The relay is not published on any port.** The shared edge is the only way
+  in, which is also what lets other projects share the machine.
 - **The Norns simulator is absent.** Its front panel has no authentication and
   can arm and kill the rig — it must never face the internet. The real device,
   or the simulator on your own machine, dials in from wherever it is.

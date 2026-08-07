@@ -20,7 +20,11 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { promises as dns } from 'node:dns';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = process.env.VPS_HOST || 'ubuntu@92.222.171.209';
 const DOMAIN = process.env.STAGEIN_DOMAIN || 'vps-e19f03d9.vps.ovh.net';
 const REMOTE_DIR = process.env.VPS_DIR || 'stagein';
@@ -64,6 +68,35 @@ Authorise your key once — it will ask for the password:
 After that no password is needed again, and it never has to pass through here.
 `);
   process.exit(1);
+}
+
+
+/**
+ * Everything a fresh clone would hold, as a tarball.
+ *
+ * `git ls-files` reports files that are still tracked but already deleted from
+ * the working tree, and tar aborts the entire transfer on the first missing
+ * one — so the list is filtered against the disk before it is used.
+ */
+function packWorkingTree() {
+  const listed = execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z'], {
+    cwd: ROOT,
+    maxBuffer: 16 * 1024 * 1024,
+  })
+    .toString('utf8')
+    .split('\0')
+    .filter(Boolean)
+    .filter((relative) => existsSync(join(ROOT, relative)));
+
+  try {
+    return execFileSync('tar', ['--null', '-T', '-', '-czf', '-'], {
+      cwd: ROOT,
+      input: `${listed.join('\0')}\0`,
+      maxBuffer: 128 * 1024 * 1024,
+    });
+  } catch (err) {
+    throw new Error(`could not pack the working tree: ${err.stderr?.toString().trim() || err.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -187,11 +220,7 @@ function deploy() {
 
   step('ship');
   // Exactly what a fresh clone holds — no node_modules, no dist, no .env.
-  const files = execFileSync('git', ['ls-files', '-co', '--exclude-standard', '-z'], { maxBuffer: 16 * 1024 * 1024 });
-  const tarball = execFileSync('tar', ['--null', '-T', '-', '-czf', '-'], {
-    input: files,
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const tarball = packWorkingTree();
   const shipped = spawnSync(
     'ssh',
     [...SSH_OPTS, HOST, `mkdir -p ~/${REMOTE_DIR} && tar -C ~/${REMOTE_DIR} -xzf -`],
