@@ -92,3 +92,46 @@ run = "ssh -t ${NORNS:-we@norns.local} 'nano ~/dust/data/stagein/config.json'"
 [tasks.demo]
 description = "Play a scripted performance against the running stack"
 run = "node scripts/demo.mjs"
+
+# --- Show time ---------------------------------------------------------------
+# Solo operation: every task below is one command, does one thing, and exits.
+
+[tasks."show:start"]
+description = "Bring the stack up for a show and print the URLs"
+run = ["docker compose up -d --build", "node scripts/urls.mjs"]
+
+[tasks."show:preflight"]
+description = "Go / no-go before doors: address, secrets, device, latency"
+run = "node scripts/show.mjs preflight"
+
+[tasks."show:status"]
+description = "One-glance state. Add --watch to follow it live"
+run = "node scripts/show.mjs status"
+
+[tasks."show:qr"]
+description = "Print the join QR in the terminal"
+run = "node scripts/show.mjs qr"
+
+[tasks."show:draw"]
+description = "Fire the lottery. --in <seconds> sets the countdown"
+run = "node scripts/show.mjs draw"
+
+[tasks."show:reopen"]
+description = "Clear any kill, reset, and reopen registrations"
+run = "node scripts/show.mjs reopen"
+
+[tasks."show:panic"]
+description = "Emergency stop from the terminal, without hunting for a browser tab"
+run = "node scripts/show.mjs panic"
+
+[tasks."show:secrets"]
+description = "Generate real host and Norns tokens into .env"
+run = "node scripts/show.mjs secrets"
+
+[tasks."show:archive"]
+description = "Save logs and the MIDI journal after a set"
+run = "node scripts/show.mjs archive"
+
+[tasks."show:stop"]
+description = "Stop the stack (the device returns to safe values on the way out)"
+run = "docker compose down"

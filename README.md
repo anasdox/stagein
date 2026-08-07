@@ -20,6 +20,9 @@ cp .env.example .env
 mise run up           # docker compose: relay + emulated Norns
 ```
 
+For running an actual show — preflight, panic, archive — see
+**[RUNBOOK.md](./RUNBOOK.md)**. It is written for one person operating alone.
+
 Then, in another terminal:
 
 ```bash
@@ -391,6 +394,11 @@ edited from the host console or the encoders, and are clamped server-side to the
 | `mise run norns:bridge-test` | prove the device transport (needs a relay) |
 | `mise run norns:deploy` | preflight + install on a Norns |
 | `mise run norns:config` / `norns:logs` | edit the device config / tail the bridge |
+| `mise run show:preflight` | go / no-go before doors (see RUNBOOK.md) |
+| `mise run show:status` | one-glance state, `--watch` to follow |
+| `mise run show:qr` / `show:draw` / `show:reopen` | run the ritual from the terminal |
+| `mise run show:panic` | emergency stop without finding a browser tab |
+| `mise run show:secrets` / `show:archive` | real tokens / post-set evidence |
 
 ---
 

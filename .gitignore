@@ -5,3 +5,4 @@ dist/
 *.log
 *:Zone.Identifier
 .DS_Store
+archive/
