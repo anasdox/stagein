@@ -168,6 +168,48 @@ stopping the stack never leaves the rig on a participant's last gesture.
 
 ---
 
+## Hosting the relay on a public VPS
+
+The Norns dials **out**, so the relay is the only piece that needs a public
+address — and once it has one, the QR works from any network, not just the
+venue's Wi-Fi.
+
+```bash
+mise run vps:check      # read-only: access, docker, DNS, ports, firewall
+mise run vps:setup      # once: docker + ufw limited to 22/80/443
+mise run vps:deploy     # ship, build, start, verify over HTTPS
+```
+
+TLS is automatic: the hostname OVH assigns resolves publicly and its reverse
+matches, so Caddy obtains a Let's Encrypt certificate on first boot. No domain to
+buy. `wss://` comes with it.
+
+Three things differ from the laptop stack, all deliberate:
+
+- **The relay is not published on any port.** Only Caddy is; the relay is
+  reachable through the proxy alone.
+- **The Norns simulator is absent.** Its front panel has no authentication and
+  can arm and kill the rig — it must never face the internet. The real device,
+  or the simulator on your own machine, dials in from wherever it is.
+- **Session creation is closed** (`NODE_ENV=production`). Otherwise the endpoint
+  hands a host token and a Norns token to anybody who asks. Sessions come from
+  configuration.
+
+Tokens are generated **on the server** on first deploy, into
+`~/stagein/deploy/.env`, and never touch this repository. `vps:deploy` prints
+them once, along with the Norns settings to enter.
+
+Point the device at it:
+
+```
+relay_ws_url  wss://<your-vps-hostname>/ws/norns
+```
+
+Then the venue only needs outbound internet — no port forwarding, no captive
+portal fight, no dependence on the house Wi-Fi reaching your laptop.
+
+---
+
 ## Checking the code still works
 
 Four suites, none of which need hardware:

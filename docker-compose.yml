@@ -15,6 +15,10 @@ services:
       BOOTSTRAP_SESSION_ID: ${BOOTSTRAP_SESSION_ID:-DEMO01}
       BOOTSTRAP_HOST_TOKEN: ${BOOTSTRAP_HOST_TOKEN:-dev-host-token-change-me}
       BOOTSTRAP_NORNS_TOKEN: ${BOOTSTRAP_NORNS_TOKEN:-dev-norns-token-change-me}
+      # The image ships NODE_ENV=production, which closes session creation. The
+      # development stack opts back in explicitly: the landing page and the
+      # bridge test both create sessions on the fly.
+      ALLOW_PUBLIC_SESSION_CREATE: ${ALLOW_PUBLIC_SESSION_CREATE:-true}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "${PORT:-8080}:8080"

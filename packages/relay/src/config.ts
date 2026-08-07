@@ -29,6 +29,13 @@ export interface RelayConfig {
   reconnectWindowMs: number;
   /** Hard ceiling on participants per session (NFR-03). */
   maxParticipants: number;
+  /**
+   * Whether anyone may create a session over HTTP.
+   *
+   * Fine on a laptop, an open door on a public relay: the endpoint hands out a
+   * host token and a Norns token to whoever asks. Off by default in production.
+   */
+  allowPublicSessionCreate: boolean;
   maxFrameBytes: number;
 }
 
@@ -52,6 +59,9 @@ export function loadConfig(): RelayConfig {
     idleTimeoutMs: intEnv('IDLE_TIMEOUT_MS', 8_000),
     reconnectWindowMs: intEnv('RECONNECT_WINDOW_MS', 20_000),
     maxParticipants: intEnv('MAX_PARTICIPANTS', 200),
+    allowPublicSessionCreate:
+      process.env.ALLOW_PUBLIC_SESSION_CREATE === 'true' ||
+      (process.env.ALLOW_PUBLIC_SESSION_CREATE !== 'false' && process.env.NODE_ENV !== 'production'),
     maxFrameBytes: intEnv('MAX_FRAME_BYTES', 4_096),
   };
 }

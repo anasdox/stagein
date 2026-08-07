@@ -1,0 +1,63 @@
+# Production stack for a public relay.
+#
+# Differences from the development compose, all of them deliberate:
+#
+#   · Caddy terminates TLS; the relay is NOT published on any host port, so the
+#     only way in is through the proxy.
+#   · The Norns simulator is absent. On a public relay the real device dials in
+#     from wherever it is (PRD §11: no inbound access to the venue). Its front
+#     panel has no authentication and can arm and kill the rig — it must never
+#     be exposed.
+#   · NODE_ENV=production turns off unauthenticated session creation, so the
+#     endpoint stops handing host tokens to whoever asks.
+#
+#   docker compose -f deploy/docker-compose.prod.yml up -d
+
+name: stagein-prod
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      STAGEIN_DOMAIN: ${STAGEIN_DOMAIN:?set STAGEIN_DOMAIN to the public hostname}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      relay:
+        condition: service_healthy
+
+  relay:
+    build:
+      context: ..
+    image: stagein:prod
+    restart: unless-stopped
+    command: ["node", "packages/relay/dist/index.js"]
+    # No `ports:` on purpose — reachable only through Caddy.
+    expose:
+      - "8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      PUBLIC_BASE_URL: https://${STAGEIN_DOMAIN}
+      BOOTSTRAP_SESSION_ID: ${BOOTSTRAP_SESSION_ID:-LIVE01}
+      BOOTSTRAP_HOST_TOKEN: ${BOOTSTRAP_HOST_TOKEN:?refusing to start with no host token}
+      BOOTSTRAP_NORNS_TOKEN: ${BOOTSTRAP_NORNS_TOKEN:?refusing to start with no norns token}
+      ALLOW_PUBLIC_SESSION_CREATE: ${ALLOW_PUBLIC_SESSION_CREATE:-false}
+      MAX_PARTICIPANTS: ${MAX_PARTICIPANTS:-200}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  caddy-data:
+  caddy-config:

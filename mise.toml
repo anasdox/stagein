@@ -4,6 +4,9 @@ pnpm = "10"
 
 [env]
 _.file = { path = ".env", redact = false }
+# Public VPS. Override per shell to target another machine.
+VPS_HOST = "ubuntu@92.222.171.209"
+STAGEIN_DOMAIN = "vps-e19f03d9.vps.ovh.net"
 
 [tasks.install]
 description = "Install workspace dependencies"
@@ -135,3 +138,31 @@ run = "node scripts/show.mjs archive"
 [tasks."show:stop"]
 description = "Stop the stack (the device returns to safe values on the way out)"
 run = "docker compose down"
+
+# --- Public VPS --------------------------------------------------------------
+# Only the relay is hosted. The Norns dials out to it from wherever it is.
+
+[tasks."vps:check"]
+description = "Is the VPS ready? Read-only: access, docker, DNS, ports, firewall"
+run = "node scripts/vps.mjs check"
+
+[tasks."vps:setup"]
+description = "Install docker and lock the firewall down to 22/80/443 (once)"
+run = "node scripts/vps.mjs setup"
+
+[tasks."vps:deploy"]
+description = "Ship, build and start the public relay, then verify over HTTPS"
+depends = ["build"]
+run = "node scripts/vps.mjs deploy"
+
+[tasks."vps:status"]
+description = "What is running on the VPS, and is it answering"
+run = "node scripts/vps.mjs status"
+
+[tasks."vps:logs"]
+description = "Tail the public relay (append a service name to narrow it)"
+run = "node scripts/vps.mjs logs"
+
+[tasks."vps:stop"]
+description = "Take the public relay down"
+run = "node scripts/vps.mjs stop"

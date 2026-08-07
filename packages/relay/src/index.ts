@@ -11,7 +11,7 @@ function main(): void {
   setLevel(config.logLevel);
 
   const store = new SessionStore(config);
-  const server = createHttpServer(store);
+  const server = createHttpServer(store, config);
   const wss = createWsServer(store, config);
 
   server.on('upgrade', (req, socket, head) => {

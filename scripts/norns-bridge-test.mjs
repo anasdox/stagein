@@ -101,11 +101,20 @@ async function main() {
 
   // A dedicated session, so this never disturbs the demo one or fights the
   // simulator for the single Norns slot.
-  const created = await fetch(`${RELAY}/api/sessions`, {
+  const response = await fetch(`${RELAY}/api/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({}),
-  }).then((r) => r.json());
+  });
+  const created = await response.json();
+  if (!response.ok) {
+    // Say which door is shut rather than timing out on the bridge later.
+    throw new Error(
+      created.error === 'session_creation_disabled'
+        ? 'the relay refuses to create sessions (ALLOW_PUBLIC_SESSION_CREATE=false). Set it to true for this test.'
+        : `could not create a test session: HTTP ${response.status} ${created.error ?? ''}`,
+    );
+  }
   console.log(`test session ${created.sessionId}`);
 
   // --- stand in for matron ------------------------------------------------

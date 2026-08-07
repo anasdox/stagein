@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 
 import { TokenBucket } from '@stagein/protocol';
 
+import type { RelayConfig } from './config';
 import { logger } from './log';
 import type { SessionStore } from './store';
 
@@ -69,9 +70,9 @@ async function readBody(req: IncomingMessage, limit = 4096): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function createHttpServer(store: SessionStore): Server {
+export function createHttpServer(store: SessionStore, config: RelayConfig): Server {
   return createServer((req, res) => {
-    handle(req, res, store).catch((err) => {
+    handle(req, res, store, config).catch((err) => {
       log.error('request failed', err);
       if (!res.headersSent) json(res, 500, { error: 'server_error' });
       else res.end();
@@ -79,7 +80,12 @@ export function createHttpServer(store: SessionStore): Server {
   });
 }
 
-async function handle(req: IncomingMessage, res: ServerResponse, store: SessionStore): Promise<void> {
+async function handle(
+  req: IncomingMessage,
+  res: ServerResponse,
+  store: SessionStore,
+  config: RelayConfig,
+): Promise<void> {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const path = url.pathname;
 
@@ -96,6 +102,11 @@ async function handle(req: IncomingMessage, res: ServerResponse, store: SessionS
   // --- session API ---------------------------------------------------------
 
   if (path === '/api/sessions' && req.method === 'POST') {
+    if (!config.allowPublicSessionCreate) {
+      // A public relay would otherwise hand a host token and a Norns token to
+      // anybody who asks. Sessions come from configuration in production.
+      return json(res, 403, { error: 'session_creation_disabled' });
+    }
     const ip = clientIp(req);
     let bucket = createLimiters.get(ip);
     if (!bucket) {
