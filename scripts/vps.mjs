@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = process.env.VPS_HOST || 'ubuntu@92.222.171.209';
-const DOMAIN = process.env.STAGEIN_DOMAIN || 'vps-e19f03d9.vps.ovh.net';
+const DOMAIN = process.env.STAGEIN_DOMAIN || 'stagein.betafactory.co';
 const REMOTE_DIR = process.env.VPS_DIR || 'stagein';
 const SESSION = (process.env.BOOTSTRAP_SESSION_ID || 'LIVE01').toUpperCase();
 

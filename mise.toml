@@ -6,7 +6,10 @@ pnpm = "10"
 _.file = { path = ".env", redact = false }
 # Public VPS. Override per shell to target another machine.
 VPS_HOST = "ubuntu@92.222.171.209"
-STAGEIN_DOMAIN = "vps-e19f03d9.vps.ovh.net"
+# Subdomain of the wildcard zone the machine serves. The name OVH assigns to
+# the VPS belongs to the machine, not to this project — the shared edge
+# answers it with a 404 and claiming it here would take StageIn offline.
+STAGEIN_DOMAIN = "stagein.betafactory.co"
 
 [tasks.install]
 description = "Install workspace dependencies"

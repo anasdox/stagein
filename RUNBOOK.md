@@ -187,13 +187,18 @@ several projects can share one VPS. StageIn only declares the hostname it wants:
 ```yaml
     networks: [edge]
     labels:
-      caddy: vps-e19f03d9.vps.ovh.net
+      caddy: stagein.betafactory.co
       caddy.reverse_proxy: "{{upstreams 8080}}"
 ```
 
 A certificate is obtained automatically for that name, and `wss://` comes with
 it. Bring the edge up first (`mise run proxy:up` in `vps-infra`), then deploy
 here.
+
+The name is a subdomain of the wildcard zone that machine serves, so there is no
+DNS step. Do **not** use the hostname OVH assigns to the VPS: it belongs to the
+machine, the edge answers it with a 404, and claiming it here would collide with
+that and take the relay offline.
 
 Three things differ from the laptop stack, all deliberate:
 
