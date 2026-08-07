@@ -261,9 +261,22 @@ end
 local param_list = {}
 local param_order = {}
 
+-- The exact set matron's paramset.add() dispatches on. Anything else is
+-- rejected the way the device rejects it, so a bad type fails in norns:check
+-- instead of during a soundcheck.
+local PARAM_TYPES = {
+  number = true, option = true, control = true, file = true,
+  taper = true, trigger = true, binary = true, text = true, separator = true,
+}
+
 params = {}
 
 function params:add(args)
+  if not PARAM_TYPES[args.type or 'number'] then
+    -- matron logs this and skips the param; the next get()/set() then throws.
+    print('paramset.add() error: unknown type')
+    return
+  end
   local p = {
     id = args.id,
     name = args.name or args.id,
@@ -289,14 +302,16 @@ function params:add_separator(_) end
 
 function params:get(id)
   local p = param_list[id]
-  return p and p.value or 0
+  if not p then error('invalid paramset index: ' .. tostring(id)) end
+  return p.value
 end
 
 function params:set(id, v, silent)
   local p = param_list[id]
-  if not p then return end
+  if not p then error('invalid paramset index: ' .. tostring(id)) end
   v = util.clamp(v, p.min, p.max)
-  if p.type == 'option' or p.type == 'integer' then v = math.floor(v + 0.5) end
+  -- matron's number param clamps without rounding; only option snaps.
+  if p.type == 'option' then v = math.floor(v + 0.5) end
   p.value = v
   if p.action and not silent then
     local ok, err = pcall(p.action, v)
@@ -306,8 +321,8 @@ end
 
 function params:delta(id, d)
   local p = param_list[id]
-  if not p then return end
-  local step = (p.type == 'option' or p.type == 'integer') and 1 or (p.max - p.min) / 100
+  if not p then error('invalid paramset index: ' .. tostring(id)) end
+  local step = (p.type == 'option' or p.type == 'number') and 1 or (p.max - p.min) / 100
   params:set(id, p.value + d * step)
 end
 

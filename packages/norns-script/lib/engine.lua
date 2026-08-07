@@ -150,6 +150,10 @@ local function emit(macro, value, axis)
   if MIDI_BACKEND == 'osc' then
     osc.send(nil, macro.osc, { value })
   else
+    -- `out` is nil until init() connects MIDI. cleanup() can run before that
+    -- (a previous load crashed mid-init) and an error here stops matron from
+    -- freeing this script's metros — orphans then repaint stale state forever.
+    if not out then return end
     out:cc(macro.cc, value, macro.channel)
   end
   if axis == 'x' then s.cc_x = value else s.cc_y = value end
@@ -203,7 +207,8 @@ local function engine_tick()
   if cy ~= s.cc_y then emit(cfg.y, cy, 'y') end
 
   if s.kill_started_at then
-    log('warn', string.format('KILL applied in %d ms', now - s.kill_started_at))
+    -- now_ms is a float on real hardware (util.time() * 1000); %d would throw.
+    log('warn', string.format('KILL applied in %d ms', math.floor(now - s.kill_started_at + 0.5)))
     s.kill_started_at = nil
   end
 end
@@ -272,7 +277,8 @@ local function apply_config(c)
     params:set('intensity', 100, true)
   end
 
-  params:set('duration', cfg.control_ms / 1000, true)
+  -- Lua division always yields a float; matron's number param stores it as-is.
+  params:set('duration', math.floor(cfg.control_ms / 1000 + 0.5), true)
 end
 
 local function apply_state(st)
@@ -445,7 +451,7 @@ local function add_params()
   params:add({
     id = 'duration',
     name = 'duration',
-    type = 'integer',
+    type = 'number',
     min = 10,
     max = 60,
     default = 30,
@@ -458,7 +464,7 @@ local function add_params()
   params:add({
     id = 'intensity',
     name = 'intensity',
-    type = 'integer',
+    type = 'number',
     min = 0,
     max = 100,
     default = 100,
@@ -588,6 +594,11 @@ local function draw_help()
 end
 
 function redraw()
+  -- matron's screensaver swaps screen.update for a no-op after 15 idle
+  -- minutes, and only a key press restores it. A stage must never meet a
+  -- sleeping screen mid-take, so keep it awake whenever the device is armed
+  -- or a participant holds the pad. (ping is absent in the simulator.)
+  if screen.ping and (s.armed or s.grant) then screen.ping() end
   screen.clear()
   if s.page == 2 then draw_help() else draw_main() end
   screen.update()
@@ -659,7 +670,9 @@ function init()
 
   metro.init({ event = engine_tick, time = 1 / ENGINE_HZ, count = -1 }):start()
   metro.init({ event = send_status, time = 1 / STATUS_HZ, count = -1 }):start()
-  metro.init({ event = redraw, time = 1 / REDRAW_HZ, count = -1 }):start()
+  -- Late-bind the global so the metro always draws the live instance, even if
+  -- a leaked metro from an earlier load survived a failed cleanup.
+  metro.init({ event = function() redraw() end, time = 1 / REDRAW_HZ, count = -1 }):start()
 
   log('info', string.format('stagein.lua ready (arm=%s, out=%s)', ARM_MODE, MIDI_BACKEND))
 end
