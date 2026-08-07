@@ -68,13 +68,17 @@ export function resolveUpgrade(
 ): { role: Role; session: LiveSession } | { error: string } {
   const path = url.pathname;
   const sessionId = url.searchParams.get('session') ?? '';
-  const session = store.get(sessionId);
+  // No session named: the relay's primary one, so a bare link works.
+  const session = sessionId ? store.get(sessionId) : store.primary();
   if (!session) return { error: 'unknown session' };
 
   if (path === '/ws/participant') {
-    const key = url.searchParams.get('k') ?? '';
-    // The join key is what a rotated QR code invalidates (PRD §11).
-    if (!tokenEquals(key, session.joinKey)) return { error: 'stale join link' };
+    // The key is what a rotated QR invalidates (PRD §11) — only meaningful when
+    // the link circulates out of sight. A code shown to a room was never secret.
+    if (session.joinKeyRequired) {
+      const key = url.searchParams.get('k') ?? '';
+      if (!tokenEquals(key, session.joinKey)) return { error: 'stale join link' };
+    }
     return { role: 'participant', session };
   }
   if (path === '/ws/host') return { role: 'host', session };

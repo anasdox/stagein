@@ -215,6 +215,10 @@
                   Régénérer
                 </button>
               </div>
+              <div class="row" style="margin-top: 10px; justify-content: space-between">
+                <span class="muted" style="font-size: 12px">Clé dans le lien</span>
+                <button id="joinKey" class="ghost" style="padding: 4px 10px; font-size: 12px">—</button>
+              </div>
               <div class="link" style="margin-top: 10px">
                 Vue publique&nbsp;: <a id="stageLink" style="color: var(--accent-2)" target="_blank">/stage</a>
               </div>
@@ -509,6 +513,12 @@
         el('btnKill').disabled = s.killed;
         el('hideNames').textContent = s.namesHidden ? 'masqués' : 'visibles';
         el('hideNames').className = s.namesHidden ? 'danger' : 'ghost';
+        // Rotating a key nobody carries would only mislead.
+        el('joinKey').textContent = s.joinKeyRequired ? 'exigée' : 'aucune';
+        el('rotate').disabled = !s.joinKeyRequired;
+        el('rotate').title = s.joinKeyRequired
+          ? 'Invalide le lien actuel et le QR code'
+          : 'Sans clé dans le lien, il n’y a rien à régénérer';
 
         renderConfig(s.config);
         renderNorns(s);
@@ -607,6 +617,9 @@
       el('btnUnkill').onclick = () => send({ t: 'unkill' });
       el('btnReset').onclick = () => {
         if (confirm('Réinitialiser la session ? Le contrôle en cours sera coupé.')) send({ t: 'reset' });
+      };
+      el('joinKey').onclick = () => {
+        if (state) send({ t: 'config', patch: { requireJoinKey: !state.joinKeyRequired } });
       };
       el('hideNames').onclick = () => {
         if (state) send({ t: 'hideNames', hidden: !state.namesHidden });

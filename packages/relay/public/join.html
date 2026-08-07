@@ -353,8 +353,11 @@
         clientId = makeClientId(); // private mode: identity lasts for the page
       }
 
+      // The bare domain is the normal entry point: no session in the path, no
+      // key. `/j/<CODE>` still works for a relay hosting more than one, and the
+      // key is only sent when a link actually carries one.
       const parts = location.pathname.split('/').filter(Boolean);
-      const sessionId = (parts[1] || '').toUpperCase();
+      const sessionId = parts[0] === 'j' ? (parts[1] || '').toUpperCase() : '';
       const joinKey = new URLSearchParams(location.search).get('k') || '';
 
       // ---------------------------------------------------------------------
@@ -403,7 +406,10 @@
 
       function wsUrl() {
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        return `${proto}://${location.host}/ws/participant?session=${encodeURIComponent(sessionId)}&k=${encodeURIComponent(joinKey)}`;
+        const query = [];
+        if (sessionId) query.push(`session=${encodeURIComponent(sessionId)}`);
+        if (joinKey) query.push(`k=${encodeURIComponent(joinKey)}`);
+        return `${proto}://${location.host}/ws/participant${query.length ? `?${query.join('&')}` : ''}`;
       }
 
       function setConn(text, cls) {

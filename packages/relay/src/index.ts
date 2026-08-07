@@ -38,6 +38,7 @@ function main(): void {
       config.bootstrap.hostToken,
       config.bootstrap.nornsToken,
     );
+    session.primary = true;
     // Registrations open immediately: the demo stack is usable on first load.
     session.open();
     log.info('bootstrap session ready');

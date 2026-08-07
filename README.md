@@ -40,7 +40,7 @@ browser too; `--lead 15` waits fifteen seconds so you have time.
 | Surface | URL | Who |
 | --- | --- | --- |
 | Host console | `http://localhost:8080/host/DEMO01#t=dev-host-token-change-me` | artist / operator |
-| Participant | open the host console and scan the QR, or use its join link | audience |
+| Participant | `http://localhost:8080/` — the bare domain is the join link | audience |
 | Stage view | `http://localhost:8080/stage/DEMO01` | projector |
 | OBS source | `http://localhost:8080/stage/DEMO01?transparent=1` | stream |
 | Norns front panel | `http://localhost:8081` | the emulated device |
@@ -271,11 +271,11 @@ the credential.
 
 ## Acceptance
 
-Four suites, 121 checks. Each covers a layer the others cannot reach:
+Four suites, 123 checks. Each covers a layer the others cannot reach:
 
 | Suite | Checks | Needs | Covers |
 | --- | --- | --- | --- |
-| `mise run smoke` | 58 | running stack | the product: PRD §14 criteria, end to end |
+| `mise run smoke` | 60 | running stack | the product: PRD §14 criteria, end to end |
 | `mise run ui-check` | 26 | nothing | the participant page actually renders and behaves |
 | `mise run norns:check` | 26 | nothing | the bundle is complete, parses, and boots |
 | `mise run norns:bridge-test` | 11 | running relay | the device's OSC↔WebSocket transport |
@@ -448,6 +448,7 @@ hardcoded guess, so a rehearsal can settle them:
 | --- | --- | --- |
 | Can the winner re-enter the next draw? | no | `winnerCanRewin` |
 | Is a pseudonym required to join? | a stage name is assigned, editable before joining | — |
+| Does the join link carry a key? | no — the bare domain, stable across restarts | `requireJoinKey` |
 | Are names moderated? | yes, in the relay; host can hide them all | `hideNames` |
 | Where does the pad start? | centre | `padStart` (`center` · `safe` · `last`) |
 | Which device and which CC for the pilot? | CC 74 filter, CC 91 delay, channel 1 | `macros.x` / `macros.y` |

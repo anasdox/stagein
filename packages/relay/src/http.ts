@@ -175,6 +175,16 @@ async function handle(
   }
 
   if (path === '/' || path === '/index.html') {
+    // The bare domain is the join link. It is what a QR on a wall can carry and
+    // what can be said into a microphone, and with one session per deployment
+    // the code in the path disambiguates nothing.
+    //
+    // Without a primary session there is nothing to join, so the landing page
+    // stands in — which is also the only place session creation makes sense.
+    const primary = store.primary();
+    return sendFile(res, join(PUBLIC_DIR, primary ? 'join.html' : 'index.html'));
+  }
+  if (path === '/new') {
     return sendFile(res, join(PUBLIC_DIR, 'index.html'));
   }
 

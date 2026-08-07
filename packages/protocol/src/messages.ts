@@ -31,6 +31,8 @@ export interface PublicState {
   killed: boolean;
   /** Host has hidden participant names from the public view. */
   namesHidden: boolean;
+  /** The join link needs a key; a bare link will be refused. */
+  joinKeyRequired: boolean;
   preset: string;
   macroNames: { x: string; y: string };
   endReason: EndReason | null;

@@ -35,6 +35,18 @@ export class SessionStore {
     return this.sessions.get(id.toUpperCase());
   }
 
+  /**
+   * The session served at the root, when there is one.
+   *
+   * Lets a participant reach the lottery by typing the bare domain, which is
+   * what a QR on a wall or a name said into a microphone can realistically
+   * carry.
+   */
+  primary(): LiveSession | undefined {
+    const id = this.config.bootstrap?.sessionId;
+    return id ? this.sessions.get(id) : undefined;
+  }
+
   list(): LiveSession[] {
     return [...this.sessions.values()];
   }

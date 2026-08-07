@@ -136,8 +136,16 @@ async function main() {
   const welcome = await waitFor('host welcome', () => host.last('welcome'));
   const hostState = welcome.state;
   check('host authenticated', Boolean(hostState.config), `state=${hostState.state}`);
-  check('join url carries a rotating key', /\/j\/[A-Z0-9]+\?k=/.test(hostState.joinUrl), hostState.joinUrl);
+  // The normal link is the bare domain: short enough to read aloud, small
+  // enough to make a robust QR, and stable across restarts.
+  check(
+    'the join link is the bare domain, with no key',
+    !hostState.joinUrl.includes('?k=') && new URL(hostState.joinUrl).pathname === '/',
+    hostState.joinUrl,
+  );
   const joinKey = new URL(hostState.joinUrl).searchParams.get('k');
+  const participantUrl = (key = joinKey) =>
+    `${wsBase}/ws/participant?session=${SESSION}${key ? `&k=${key}` : ''}`;
 
   const qr = await fetch(`${RELAY}/api/sessions/${SESSION}/qr.svg`);
   const qrBody = await qr.text();
@@ -150,12 +158,29 @@ async function main() {
   check('wrong host token refused', rejected.code === 'bad_token');
   badHost.close();
 
+  // A bare link is the point of the default: no key to go stale, nothing to
+  // rotate out from under a printed or displayed QR.
+  const bare = new Client(`${wsBase}/ws/participant?session=${SESSION}`, 'bare');
+  await bare.ready;
+  bare.send({ t: 'hello', clientId: clientId(), pseudo: '' });
+  const bareWelcome = await waitFor('bare link accepted', () => bare.last('welcome'));
+  check('a link with no key is accepted', Boolean(bareWelcome), `session ${bareWelcome.state.sessionId}`);
+  bare.close();
+
+  // Revocation still exists for links that circulate out of sight, such as in a
+  // stream chat; it is opt-in rather than imposed on a QR shown to a room.
+  host.send({ t: 'config', patch: { requireJoinKey: true } });
+  await waitFor('key required', () => host.last('state')?.state.joinKeyRequired === true);
   const staleJoin = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=stale-key`, 'stale');
   const staleClosed = await new Promise((resolve) => {
     staleJoin.ws.addEventListener('close', () => resolve(true));
     staleJoin.ws.addEventListener('error', () => resolve(true));
   });
-  check('stale join link refused (PRD §11)', staleClosed === true);
+  check('with the key turned on, a stale link is refused (PRD §11)', staleClosed === true);
+  const keyed = new URL(host.last('state').state.joinUrl).searchParams.get('k');
+  check('and the link then carries one', Boolean(keyed), `?k=${keyed?.slice(0, 6)}…`);
+  host.send({ t: 'config', patch: { requireJoinKey: false } });
+  await waitFor('key optional again', () => host.last('state')?.state.joinKeyRequired === false);
 
   // --- 2. arm the device ----------------------------------------------------
   section('2 · Norns arming gate (FR-12)');
@@ -190,7 +215,7 @@ async function main() {
   await waitFor('session open', () => host.last('state')?.state.state === 'OPEN');
 
   const joinAs = async (name, id = clientId()) => {
-    const p = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, name);
+    const p = new Client(participantUrl(), name);
     await p.ready;
     p.id = id;
     p.pseudo = name;
@@ -205,7 +230,7 @@ async function main() {
 
   // A phone that brings no pseudonym must still get a usable stage name: the
   // public view has to be able to announce whoever wins (PRD §4).
-  const unnamed = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, 'unnamed');
+  const unnamed = new Client(participantUrl(), 'unnamed');
   await unnamed.ready;
   unnamed.send({ t: 'hello', clientId: clientId(), pseudo: '' });
   const assigned = await waitFor('assigned stage name', () => unnamed.last('welcome'));
@@ -216,7 +241,7 @@ async function main() {
   );
   const assignedNames = new Set();
   for (let i = 0; i < 8; i++) {
-    const extra = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, `extra${i}`);
+    const extra = new Client(participantUrl(), `extra${i}`);
     await extra.ready;
     extra.send({ t: 'hello', clientId: clientId(), pseudo: '' });
     const frame = await waitFor(`extra${i} welcome`, () => extra.last('welcome'));
@@ -234,7 +259,7 @@ async function main() {
   // Moderation. The public view is a projection surface (FR-15), so the relay —
   // not the page — has to refuse a name; a participant can send `pseudo`
   // straight down the socket.
-  const abusive = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, 'abusive');
+  const abusive = new Client(participantUrl(), 'abusive');
   await abusive.ready;
   abusive.send({ t: 'hello', clientId: clientId(), pseudo: '' });
   const abusiveWelcome = await waitFor('abusive welcome', () => abusive.last('welcome'));
@@ -270,7 +295,7 @@ async function main() {
   // existing record instead of creating a second lottery entry (PRD §7). The
   // relay closes the older socket, which is also the reconnection path (NFR-05).
   const novaId = people[0].id;
-  const twin = new Client(`${wsBase}/ws/participant?session=${SESSION}&k=${joinKey}`, 'twin');
+  const twin = new Client(participantUrl(), 'twin');
   await twin.ready;
   twin.send({ t: 'hello', clientId: novaId, pseudo: 'nova-again' });
   await sleep(400);

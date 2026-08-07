@@ -105,6 +105,14 @@ export class LiveSession {
   private reopenAfterEnd = true;
 
   killed = false;
+  /**
+   * The session this relay serves at its root.
+   *
+   * With one session per deployment the code in the path disambiguates nothing,
+   * so the join link is just the domain: short enough to read aloud, small
+   * enough to make a robust QR, and stable across restarts.
+   */
+  primary = false;
 
   readonly journal = new LogRing();
   private readonly latencyNorns = new Percentile();
@@ -141,7 +149,15 @@ export class LiveSession {
   }
 
   get joinUrl(): string {
-    return `${this.relayConfig.publicBaseUrl}/j/${this.id}?k=${this.joinKey}`;
+    const base = this.relayConfig.publicBaseUrl;
+    const path = this.primary ? '' : `/j/${this.id}`;
+    const key = this.config.requireJoinKey ? `?k=${this.joinKey}` : '';
+    return `${base}${path || '/'}${key}`;
+  }
+
+  /** Whether a link must carry the rotating key to be accepted. */
+  get joinKeyRequired(): boolean {
+    return this.config.requireJoinKey;
   }
 
   get stageUrl(): string {
@@ -182,6 +198,7 @@ export class LiveSession {
       nornsArmed: this.nornsStatus?.armed ?? false,
       killed: this.killed,
       namesHidden: this.config.hideNames,
+      joinKeyRequired: this.config.requireJoinKey,
       preset: this.config.preset,
       macroNames: { x: this.config.macros.x.name, y: this.config.macros.y.name },
       endReason: this.state === 'ENDED' ? this.endReason : null,

@@ -88,6 +88,16 @@ export interface SessionConfig {
    * anything the name filter lets through, mid-set, without a restart.
    */
   hideNames: boolean;
+  /**
+   * Require a rotating key in the join link.
+   *
+   * Off by default. The key lets a leaked link be revoked while the session
+   * stays alive — which only means something when the link circulates out of
+   * sight, such as in a stream chat. A QR shown to a room was never secret, and
+   * there the key only adds a way to fail: it changes on every relay restart,
+   * so a displayed or printed code dies without anyone revoking anything.
+   */
+  requireJoinKey: boolean;
   /** Preset label, selected with E1 on the Norns. */
   preset: string;
   macros: { x: MacroConfig; y: MacroConfig };
@@ -122,6 +132,7 @@ export function defaultConfig(): SessionConfig {
     padStart: 'center',
     endBehavior: 'return-safe',
     hideNames: false,
+    requireJoinKey: false,
     preset: 'filter+delay',
     macros: {
       x: {

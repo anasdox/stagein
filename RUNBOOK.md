@@ -30,6 +30,16 @@ the two follow-ups: restart the stack, and put the new Norns token on the device
 **2. Point the QR at an address phones can reach.** This is the single most
 common way the evening fails: the QR carries `localhost`, and nobody can join.
 
+The join link is the bare domain — `https://stagein.betafactory.co` — with no
+session code and no key. It is short enough to say into a microphone, small
+enough to make a QR that survives a dark room, and it does not change when the
+relay restarts. Print it, project it, put it on a sticker: it keeps working.
+
+The rotating key still exists, off by default, and the host console turns it on
+per session (*Clé dans le lien*). Use it when the link circulates somewhere you
+cannot see — a stream chat — where being able to revoke it means something.
+Never with a printed code: rotating would kill every copy already in the room.
+
 ```bash
 # find the address, then put it in .env
 mise run urls
@@ -84,6 +94,9 @@ That test takes fifteen seconds and is the only one that matters.
 ```bash
 mise run show:qr           # the QR in the terminal, to check or to show
 ```
+
+Someone whose camera will not scan can type the domain instead. That is the
+point of the short link.
 
 ---
 

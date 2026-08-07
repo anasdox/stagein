@@ -275,6 +275,7 @@ export function applyConfigPatch(config: SessionConfig, patch: Record<string, un
   if (typeof patch.autoRedrawOnNoShow === 'boolean') next.autoRedrawOnNoShow = patch.autoRedrawOnNoShow;
   if (typeof patch.winnerCanRewin === 'boolean') next.winnerCanRewin = patch.winnerCanRewin;
   if (typeof patch.hideNames === 'boolean') next.hideNames = patch.hideNames;
+  if (typeof patch.requireJoinKey === 'boolean') next.requireJoinKey = patch.requireJoinKey;
   if (patch.padStart === 'center' || patch.padStart === 'safe' || patch.padStart === 'last') {
     next.padStart = patch.padStart;
   }
