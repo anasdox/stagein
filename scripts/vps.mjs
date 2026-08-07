@@ -19,6 +19,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
+import { promises as dns } from 'node:dns';
 
 const HOST = process.env.VPS_HOST || 'ubuntu@92.222.171.209';
 const DOMAIN = process.env.STAGEIN_DOMAIN || 'vps-e19f03d9.vps.ovh.net';
@@ -67,7 +68,7 @@ After that no password is needed again, and it never has to pass through here.
 
 // ---------------------------------------------------------------------------
 
-function check() {
+async function check() {
   console.log(`${B}StageIn — VPS check${O}`);
   console.log(`${D}${HOST} · ${DOMAIN}${O}`);
 
@@ -94,11 +95,24 @@ function check() {
   step('network');
   // Certificate issuance needs 80 reachable from the internet, and the name has
   // to point here — both are Let's Encrypt preconditions, not nice-to-haves.
-  const resolved = remote(`getent ahostsv4 ${DOMAIN} | head -1 | awk '{print $1}'`);
+  //
+  // Resolved from here, not on the VPS: Ubuntu maps its own hostname to
+  // 127.0.1.1 in /etc/hosts, so asking the machine what its name resolves to
+  // answers with the loopback and looks like a misconfigured zone.
   const publicIp = remote('curl -s --max-time 8 https://api.ipify.org || true');
-  if (resolved && publicIp && resolved === publicIp) ok('DNS points at this machine', `${DOMAIN} → ${resolved}`);
-  else if (resolved) warn('DNS does not match the machine public IP', `${DOMAIN} → ${resolved}, machine → ${publicIp}`);
-  else bad('the domain does not resolve', DOMAIN);
+  let addresses = null;
+  try {
+    addresses = await dns.resolve4(DOMAIN);
+  } catch {
+    /* reported below */
+  }
+  if (addresses?.length && publicIp && addresses.includes(publicIp)) {
+    ok('public DNS points at this machine', `${DOMAIN} → ${addresses.join(', ')}`);
+  } else if (addresses?.length) {
+    warn('public DNS does not match the machine public IP', `${DOMAIN} → ${addresses.join(', ')}, machine → ${publicIp}`);
+  } else {
+    bad('the domain does not resolve publicly', DOMAIN);
+  }
 
   const listening = remote("ss -tlnp 2>/dev/null | awk 'NR>1{print $4}' | grep -E ':(80|443)$' || true");
   if (listening) warn('something already listens on 80/443', listening.replace(/\n/g, ' '));
@@ -286,4 +300,4 @@ if (!command || !COMMANDS[command]) {
   console.error(`usage: vps.mjs <${Object.keys(COMMANDS).join('|')}>`);
   process.exit(2);
 }
-COMMANDS[command]();
+await COMMANDS[command]();
