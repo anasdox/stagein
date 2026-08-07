@@ -381,6 +381,10 @@ export class LiveSession {
     }
 
     const pad = this.startPad();
+    // The phone numbers its frames from zero for each grant, so the replay
+    // guard must start over too — otherwise a second win by the same device
+    // gets every frame silently dropped as a replay.
+    chosen.lastSeq = -1;
     this.grant = {
       grantId: randomToken(6),
       token: randomToken(24),
