@@ -23,6 +23,7 @@ import {
   type PublicState,
   type SessionConfig,
   type SessionState,
+  type StageLive,
   type StageOut,
 } from '@stagein/protocol';
 
@@ -38,6 +39,12 @@ const ENDED_DISPLAY_MS = 3_000;
 const AUTO_REDRAW_COUNTDOWN_MS = 3_000;
 /** A latency sample beyond this is clock skew, not network delay — discard it. */
 const MAX_PLAUSIBLE_LATENCY_MS = 5_000;
+/**
+ * How often the overlay gets the pad position. Ten a second is smooth to the
+ * eye and a fifth of the tick, which keeps a projector cheap: this frame is the
+ * only one that fires while nothing in the session is actually changing.
+ */
+const LIVE_PUSH_MS = 100;
 
 function send(ws: WebSocket | null | undefined, msg: unknown): void {
   if (!ws || ws.readyState !== 1) return;
@@ -983,8 +990,42 @@ export class LiveSession {
 
     // 6. Heartbeats, which also drive clock-offset estimation.
     this.heartbeat(now);
+
+    // 7. The overlay's moving numbers, to stage sockets only.
+    this.pushLive(now);
   }
 
+  /**
+   * The pad position and its counters, for `/stage/<id>/main`. Sent on its own
+   * clock rather than through `flush`, so a gesture never marks the session
+   * dirty and never reaches a participant socket.
+   */
+  private pushLive(now: number): void {
+    if (this.stageSockets.size === 0) return;
+    if (now - this.lastLive < LIVE_PUSH_MS) return;
+    this.lastLive = now;
+
+    const playing = this.state === 'ACTIVE' && this.grant !== null && !this.grant.revoked;
+    const source = this.latencyNorns.count > 0 ? this.latencyNorns : this.latencyRelay;
+    const live: StageLive = {
+      x: playing ? this.grant!.lastX : null,
+      y: playing ? this.grant!.lastY : null,
+      // Only while the device is actually connected: `nornsStatus` is kept
+      // after a disconnect so the host can still read the last known state, and
+      // reporting that here would publish a position nothing is holding.
+      outX: this.nornsSocket ? (this.nornsStatus?.outX ?? null) : null,
+      outY: this.nornsSocket ? (this.nornsStatus?.outY ?? null) : null,
+      latencyP50: source.p50,
+      latencyP95: source.p95,
+      latencySource: this.latencyNorns.count > 0 ? 'norns' : this.latencyRelay.count > 0 ? 'relay' : null,
+      eventsIn: this.eventsIn,
+      eventsDropped: this.eventsDropped,
+    };
+    const frame: StageOut = { t: 'live', live };
+    for (const ws of this.stageSockets) send(ws, frame);
+  }
+
+  private lastLive = 0;
   private lastHeartbeat = 0;
 
   private heartbeat(now: number): void {

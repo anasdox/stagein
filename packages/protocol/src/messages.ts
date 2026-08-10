@@ -231,8 +231,33 @@ export type NornsOut =
 // Stage (public, read-only)
 // ---------------------------------------------------------------------------
 
+/**
+ * The numbers that move while a `state` frame does not: the pad position and
+ * the counters that follow it. Split out because `state` is pushed to every
+ * surface when something changes, and a finger on a pad changes nothing about
+ * the session — sending a full state per gesture would put a frame on 200
+ * phones to move a dot on one overlay. This goes to stage sockets only, on its
+ * own slower clock.
+ *
+ * Nothing here identifies anybody: two normalised positions and counters.
+ */
+export interface StageLive {
+  /** Winner's last pad position, 0..1. Null when nobody is playing. */
+  x: number | null;
+  y: number | null;
+  /** Post-slew position actually leaving the device. Null when no Norns reports. */
+  outX: number | null;
+  outY: number | null;
+  latencyP50: number | null;
+  latencyP95: number | null;
+  latencySource: 'norns' | 'relay' | null;
+  eventsIn: number;
+  eventsDropped: number;
+}
+
 export type StageOut =
   | { t: 'state'; state: PublicState }
+  | { t: 'live'; live: StageLive }
   | { t: 'ping'; id: number; ts: number };
 
 // ---------------------------------------------------------------------------

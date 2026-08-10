@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StageIn — stage overlay</title>
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      /* An OBS browser source laid over a camera feed: one band along the
+         bottom, the whole frame above it left to the shot. Both html and body
+         must be transparent — leaving either one painted hands OBS an opaque
+         layer and the camera disappears behind it.
+
+         Add ?bg=1 to paint a dark backdrop, which is the only way to read the
+         page in an ordinary browser tab: white on transparent over the browser
+         default is white on white. */
+      html,
+      body {
+        background: transparent;
+        height: 100%;
+        overflow: hidden;
+      }
+      body.backdrop {
+        background: #101014;
+      }
+
+      .band {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: flex-end;
+        gap: clamp(16px, 3vw, 56px);
+        padding: 2.5vh 3vw;
+        /* An overlay is not a page you click. */
+        pointer-events: none;
+        color: #fff;
+        /* The feed underneath can be any brightness, and a white-on-white band
+           is a blank overlay. The shadow is what keeps it readable — it costs
+           nothing over a dark shot and saves a bright one. */
+        text-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.9),
+          0 0 14px rgba(0, 0, 0, 0.5);
+      }
+
+      .label {
+        font-size: clamp(9px, 0.85vw, 13px);
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        font-weight: 700;
+        opacity: 0.75;
+      }
+      .line {
+        font-size: clamp(11px, 1.1vw, 18px);
+        opacity: 0.85;
+      }
+      /* Join — the QR is the only thing here that may not be transparent: a
+         code needs its quiet zone and its contrast to survive a phone camera in
+         a dark room, so it keeps a white plate. */
+      .join {
+        display: flex;
+        align-items: center;
+        gap: clamp(8px, 0.9vw, 16px);
+      }
+      .join img {
+        width: clamp(62px, 7vw, 112px);
+        height: auto;
+        background: #fff;
+        border-radius: 8px;
+        padding: 6px;
+      }
+
+      /* Who is on stage takes the slack, so the metrics stay pinned right. */
+      .who {
+        flex: 1;
+        min-width: 0;
+      }
+      .name {
+        font-size: clamp(20px, 2.7vw, 46px);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        /* A pseudonym is arbitrary text and the band is not elastic. */
+        overflow-wrap: anywhere;
+      }
+
+      /* The control: the square is the gesture, and the only readout — a dot
+         moving under someone's thumb reads from the back of a room in a way a
+         pair of percentages never does. */
+      .pad {
+        position: relative;
+        width: clamp(54px, 5.5vw, 96px);
+        aspect-ratio: 1;
+        border: 2px solid rgba(255, 255, 255, 0.55);
+        border-radius: 9px;
+      }
+      .pad::before,
+      .pad::after {
+        content: '';
+        position: absolute;
+        background: rgba(255, 255, 255, 0.22);
+      }
+      .pad::before {
+        left: 50%;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+      }
+      .pad::after {
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+      }
+      .dot {
+        position: absolute;
+        width: 18%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.85);
+        /* 0 sits at the bottom-left, the way the pad reads under a thumb. */
+        left: calc(var(--px, 0.5) * 100%);
+        bottom: calc(var(--py, 0.5) * 100%);
+        transform: translate(-50%, 50%);
+        transition: left 0.1s linear, bottom 0.1s linear;
+      }
+      .control.idle .pad {
+        opacity: 0.4;
+      }
+      .control.idle .dot {
+        opacity: 0.25;
+      }
+
+      /* Metrics — label left, value right, so the column of figures lines up
+         and a changing value does not shift its neighbours. */
+      .metrics {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 0.3vh 1.1em;
+        margin: 0;
+        font-size: clamp(11px, 1.05vw, 17px);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .metrics dt {
+        opacity: 0.7;
+      }
+      .metrics dd {
+        margin: 0;
+        text-align: right;
+        font-weight: 700;
+      }
+
+      .off {
+        opacity: 0.45;
+      }
+      .pulse {
+        animation: pulse 1s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        50% {
+          opacity: 0.5;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pulse {
+          animation: none;
+        }
+        .dot {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <footer class="band">
+      <div class="join">
+        <img id="qr" alt="" />
+        <div>
+          <div class="label">Scan to join</div>
+          <div class="line">Control a live musical instrument.</div>
+        </div>
+      </div>
+
+      <div class="who">
+        <div class="label">On stage</div>
+        <div class="name" id="who">nobody yet</div>
+        <div class="line" id="whoSub"></div>
+      </div>
+
+      <div class="control" id="control">
+        <div class="pad"><i class="dot" id="dot"></i></div>
+      </div>
+
+      <dl class="metrics">
+        <dt>People</dt>
+        <dd id="mPeople">—</dd>
+        <dt>Instrument</dt>
+        <dd id="mNorns">—</dd>
+        <dt>Session</dt>
+        <dd id="mSession">—</dd>
+      </dl>
+    </footer>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      if (params.get('bg') === '1') document.body.classList.add('backdrop');
+
+      // /stage/<id>/main — the id sits where it does on /stage/<id>.
+      const sessionId = (location.pathname.split('/').filter(Boolean)[1] || '').toUpperCase();
+      const el = (id) => document.getElementById(id);
+
+      const STATE_LABEL = {
+        OPEN: 'open',
+        DRAWING: 'drawing',
+        AWARDED: 'drawn',
+        ACTIVE: 'live',
+        ENDED: 'ended',
+        CLOSED: 'closed',
+      };
+
+      let state = null;
+      let qrTimer = null;
+
+      /**
+       * The QR is fetched once. It only changes when the host rotates the join
+       * key, which is off by default — so it is re-fetched on a timer only
+       * while a key is actually required, rather than churning an image every
+       * frame for a link that never moves.
+       */
+      function refreshQr() {
+        el('qr').src = `/api/sessions/${sessionId}/qr.svg?v=${Date.now()}`;
+      }
+
+      function connect() {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${proto}://${location.host}/ws/stage?session=${encodeURIComponent(sessionId)}`);
+        ws.onmessage = (ev) => {
+          const msg = JSON.parse(ev.data);
+          if (msg.t === 'state') renderState(msg.state);
+          else if (msg.t === 'live') renderLive(msg.live);
+        };
+        ws.onclose = () => {
+          el('mSession').textContent = 'reconnecting…';
+          setTimeout(connect, 1000);
+        };
+      }
+
+      function renderState(s) {
+        const first = state === null;
+        state = s;
+        if (first) refreshQr();
+
+        if (s.joinKeyRequired && !qrTimer) qrTimer = setInterval(refreshQr, 15_000);
+        else if (!s.joinKeyRequired && qrTimer) {
+          clearInterval(qrTimer);
+          qrTimer = null;
+        }
+
+        // --- who is on stage ----------------------------------------------
+        const playing = s.state === 'AWARDED' || s.state === 'ACTIVE';
+        el('who').textContent = playing ? s.winnerPseudo || 'anonymous' : 'nobody yet';
+        el('who').classList.toggle('off', !playing);
+        el('whoSub').textContent =
+          s.state === 'AWARDED'
+            ? 'waiting for the first move…'
+            : s.state === 'ACTIVE'
+              ? 'in control'
+              : s.state === 'ENDED'
+                ? 'next draw coming up'
+                : '';
+        el('whoSub').classList.toggle('pulse', s.state === 'AWARDED');
+
+        // --- metrics -------------------------------------------------------
+        el('mPeople').textContent = s.entrants;
+        el('mNorns').textContent = s.killed
+          ? 'stopped'
+          : s.nornsOnline
+            ? s.nornsArmed
+              ? 'armed'
+              : 'online'
+            : 'offline';
+
+        // The countdown qualifies the state rather than standing on its own, so
+        // it rides the session line instead of becoming a fourth metric.
+        const label = s.killed ? 'STOPPED' : STATE_LABEL[s.state] || s.state;
+        const secs =
+          s.state === 'DRAWING' && s.countdownMs != null
+            ? Math.ceil(s.countdownMs / 1000)
+            : s.remainingMs != null
+              ? Math.ceil(s.remainingMs / 1000)
+              : null;
+        el('mSession').textContent = secs == null ? label : `${label} · ${secs}s`;
+
+        // The pad only means something while somebody is holding it.
+        el('control').classList.toggle('idle', s.state !== 'ACTIVE');
+      }
+
+      function renderLive(live) {
+        // The gesture, not the instrument. `outX`/`outY` are what the device is
+        // emitting, and the device only moves once it is armed — so plotting
+        // those leaves the dot parked on the safe preset while the winner is
+        // visibly working the pad. Whether it reaches the rig is the Instrument
+        // line's job to say.
+        // The moving dot is the whole readout: the axes carry no meaning to an
+        // audience, and a percentage is a number nobody watches a performance
+        // to read.
+        const { x, y } = live;
+        const dot = el('dot');
+        if (x != null) dot.style.setProperty('--px', x);
+        if (y != null) dot.style.setProperty('--py', y);
+      }
+
+      connect();
+    </script>
+  </body>
+</html>

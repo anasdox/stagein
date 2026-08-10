@@ -165,6 +165,9 @@ async function handle(
   const pageRoutes: Array<[RegExp, string]> = [
     [/^\/j\/([A-Za-z0-9]{1,16})\/?$/, 'join.html'],
     [/^\/host\/([A-Za-z0-9]{1,16})\/?$/, 'host.html'],
+    // More specific first: /stage/<id>/main is the corner overlay, /stage/<id>
+    // the full-screen public view.
+    [/^\/stage\/([A-Za-z0-9]{1,16})\/main\/?$/, 'overlay.html'],
     [/^\/stage\/([A-Za-z0-9]{1,16})\/?$/, 'stage.html'],
   ];
   for (const [pattern, file] of pageRoutes) {

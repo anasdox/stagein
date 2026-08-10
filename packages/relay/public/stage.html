@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>StageIn — vue publique</title>
+    <title>StageIn — public view</title>
     <link rel="stylesheet" href="/app.css" />
     <style>
       /* Sized for a projector or an OBS browser source; add ?transparent=1 to
@@ -13,8 +13,20 @@
         height: 100%;
         overflow: hidden;
       }
+      /* Both elements, not just body: app.css paints html too, and one painted
+         layer is enough to hand OBS an opaque source. The class goes on both
+         from script rather than matching with :has(), which older OBS builds
+         do not have. */
+      html.transparent,
       body.transparent {
         background: transparent;
+      }
+      /* The public view is read at a distance, often keyed over video: every
+         piece of text stays pure white, only the bar keeps its accent. */
+      body,
+      .stage,
+      .foot {
+        color: #fff;
       }
       .stage {
         height: 100dvh;
@@ -30,7 +42,7 @@
         font-size: clamp(12px, 1.6vw, 20px);
         letter-spacing: 0.4em;
         text-transform: uppercase;
-        color: var(--dim);
+        color: #fff;
         font-weight: 700;
       }
       .headline {
@@ -49,10 +61,10 @@
       }
       .sub {
         font-size: clamp(16px, 2.4vw, 32px);
-        color: var(--dim);
+        color: #fff;
       }
       .winner {
-        color: var(--accent);
+        color: #fff;
       }
       .bar {
         width: min(760px, 80vw);
@@ -84,12 +96,6 @@
         border-radius: 14px;
         padding: 10px;
       }
-      .code {
-        font-family: ui-monospace, Menlo, monospace;
-        font-size: clamp(28px, 5vw, 68px);
-        letter-spacing: 0.12em;
-        font-weight: 700;
-      }
       .foot {
         position: fixed;
         bottom: 2vh;
@@ -99,7 +105,7 @@
         justify-content: center;
         gap: 18px;
         font-size: clamp(11px, 1.2vw, 15px);
-        color: var(--dim);
+        color: #fff;
       }
       body.transparent .foot {
         display: none;
@@ -132,7 +138,10 @@
 
     <script>
       const params = new URLSearchParams(location.search);
-      if (params.get('transparent') === '1') document.body.classList.add('transparent');
+      if (params.get('transparent') === '1') {
+        document.documentElement.classList.add('transparent');
+        document.body.classList.add('transparent');
+      }
       const showQr = params.get('qr') !== '0';
 
       const sessionId = (location.pathname.split('/').filter(Boolean)[1] || '').toUpperCase();
@@ -158,8 +167,8 @@
           <div class="qrbox">
             ${showQr ? `<img src="/api/sessions/${sessionId}/qr.svg?v=${Date.now()}" alt="QR code" />` : ''}
             <div>
-              <div class="headline">Scanne&nbsp;: entre en scène.</div>
-              <div class="code">${sessionId}</div>
+              <div class="headline">Scan&nbsp;: take the stage.</div>
+              <div class="sub">Control a live musical instrument.</div>
             </div>
           </div>`;
       }
@@ -168,14 +177,14 @@
         const previous = state;
         state = s;
 
-        document.getElementById('fState').textContent = `${s.sessionId} · ${s.state} · ${s.entrants} inscrits`;
+        document.getElementById('fState').textContent = `${s.sessionId} · ${s.state} · ${s.entrants} entered`;
         document.getElementById('fNorns').textContent = s.killed
           ? 'KILL'
           : s.nornsOnline
             ? s.nornsArmed
-              ? 'norns armé'
-              : 'norns en ligne'
-            : 'norns absent';
+              ? 'norns armed'
+              : 'norns online'
+            : 'norns offline';
 
         // Only rebuild the DOM when the shape of the display actually changes.
         const shape = `${s.state}|${s.winnerPseudo || ''}|${s.entrants}|${s.endReason || ''}|${s.namesHidden}`;
@@ -209,31 +218,31 @@
           case 'OPEN':
             return `
               ${joinBlock()}
-              <div class="sub">${s.entrants} personne${s.entrants === 1 ? '' : 's'} dans la loterie</div>`;
+              <div class="sub">${s.entrants} ${s.entrants === 1 ? 'person' : 'people'} in the draw</div>`;
           case 'DRAWING':
             return `
-              <div class="sub">Tirage</div>
+              <div class="sub">Drawing</div>
               <div class="huge" id="bigCount">—</div>
-              <div class="sub">${s.entrants} participants</div>`;
+              <div class="sub">${s.entrants} entrants</div>`;
           case 'AWARDED':
             return `
-              <div class="sub">Sur scène</div>
-              <div class="headline winner">${escapeHtml(s.winnerPseudo || 'anonyme')}</div>
-              <div class="sub pulse">en attente du premier geste…</div>`;
+              <div class="sub">On stage</div>
+              <div class="headline winner">${escapeHtml(s.winnerPseudo || 'anonymous')}</div>
+              <div class="sub pulse">waiting for the first move…</div>`;
           case 'ACTIVE':
             return `
-              <div class="sub">En direct</div>
-              <div class="headline winner">${escapeHtml(s.winnerPseudo || 'anonyme')}</div>
+              <div class="sub">Live</div>
+              <div class="headline winner">${escapeHtml(s.winnerPseudo || 'anonymous')}</div>
               <div class="huge" id="remain">—</div>
               <div class="sub">${escapeHtml(s.macroNames.x)} × ${escapeHtml(s.macroNames.y)}</div>`;
           case 'ENDED':
             return `
-              <div class="headline">Merci ${escapeHtml(s.winnerPseudo || '')}</div>
-              <div class="sub">${s.endReason === 'no_show' ? 'Nouveau tirage…' : 'Prochain tirage bientôt'}</div>`;
+              <div class="headline">Thanks ${escapeHtml(s.winnerPseudo || '')}</div>
+              <div class="sub">${s.endReason === 'no_show' ? 'Drawing again…' : 'Next draw coming up'}</div>`;
           default:
             return `
-              <div class="headline">Bientôt.</div>
-              <div class="sub">Les inscriptions ouvriront pendant le set.</div>`;
+              <div class="headline">Soon.</div>
+              <div class="sub">Entries open during the set.</div>`;
         }
       }
 
