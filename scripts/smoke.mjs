@@ -642,6 +642,63 @@ async function main() {
   );
   check('output back to safe after a dropped phone', true);
 
+  // --- 8b. draw after draw, with nobody new ---------------------------------
+  // A rehearsal, or a quiet room, is one phone. The exclusion of the previous
+  // winner must not turn that into a dead end where only a session reset gets
+  // another draw out of the relay.
+  section('8b · successive draws with a single entrant');
+  host.send({ t: 'reset' });
+  await waitFor('reset before the solo run', () => host.last('state')?.state.state === 'CLOSED');
+  host.send({ t: 'config', patch: { winnerCanRewin: false, activationTimeoutMs: 10000 } });
+  host.send({ t: 'open' });
+  await waitFor('open for the solo run', () => host.last('state')?.state.state === 'OPEN');
+
+  // Nobody has entered yet: the refusal must be spoken, not just logged.
+  host.clear();
+  host.send({ t: 'draw', countdownMs: 200 });
+  const noEntrants = await waitFor('the relay explains itself', () => host.last('error'), { timeout: 4000 });
+  check('a draw with nobody entered says why', noEntrants.code === 'no_entrants', `${noEntrants.code}: ${noEntrants.message}`);
+  check('and the session stays put', host.last('state')?.state.state === 'OPEN', host.last('state')?.state.state);
+
+  const solo = await joinAs('solo');
+  await waitFor('solo entered', () => host.last('state')?.state.entrants >= 1);
+
+  const soloWin = async (label) => {
+    solo.clear();
+    host.send({ t: 'draw', countdownMs: 200 });
+    const won = await waitFor(`${label} for the lone entrant`, () => solo.last('won'), { timeout: 6000 });
+    solo.send({ t: 'activate', grantToken: won.grantToken });
+    await waitFor(`${label} pad active`, () => solo.last('active'));
+    host.send({ t: 'revoke' });
+    await waitFor(`${label} window closed`, () => host.last('state')?.state.state === 'OPEN', { timeout: 8000 });
+    return won;
+  };
+
+  const first = await soloWin('first win');
+  const second = await soloWin('second win');
+  check(
+    'the lone entrant can win again without a session reset',
+    second.grantId !== first.grantId,
+    `grants ${first.grantId} then ${second.grantId}`,
+  );
+  check('and stays registered throughout', host.last('state')?.state.entrants >= 1, `entrants=${host.last('state')?.state.entrants}`);
+
+  // The exclusion must still bite the moment there is somebody else to pick.
+  const rival = await joinAs('rival');
+  await waitFor('two entrants', () => host.last('state')?.state.entrants >= 2);
+  solo.clear();
+  rival.clear();
+  host.send({ t: 'draw', countdownMs: 200 });
+  await waitFor('a winner among the two', () => solo.last('won') || rival.last('won'), { timeout: 6000 });
+  check(
+    'the previous winner is still skipped when someone else is entered',
+    Boolean(rival.last('won')) && !solo.last('won'),
+    rival.last('won') ? 'rival won' : 'solo won again',
+  );
+  host.send({ t: 'revoke' });
+  solo.close();
+  rival.close();
+
   // --- tidy up -------------------------------------------------------------
   section('9 · leave the stack usable');
   host.send({ t: 'reset' });

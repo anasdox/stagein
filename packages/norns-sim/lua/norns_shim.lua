@@ -326,6 +326,14 @@ function params:delta(id, d)
   params:set(id, p.value + d * step)
 end
 
+--- matron's escape hatch onto a live param. It hands back the object itself, so
+--- mutating `options` in place is how a script keeps a menu label truthful.
+function params:lookup_param(id)
+  local p = param_list[id]
+  if not p then error('invalid paramset index: ' .. tostring(id)) end
+  return p
+end
+
 function params:string(id)
   local p = param_list[id]
   if not p then return '' end
@@ -346,15 +354,55 @@ end
 
 midi = {}
 
-function midi.connect(n)
-  local device = { port = n or 1, name = 'stagein-out' }
-  function device:cc(cc, val, ch)
-    _host_midi_cc(ch or 1, cc, val)
-  end
-  function device:note_on() end
-  function device:note_off() end
-  return device
+--- matron exposes sixteen virtual ports, each either holding a device or empty.
+--- Two details decide whether a show makes any sound, so the emulator mirrors
+--- them exactly (norns lua/core/midi.lua and lua/core/vport.lua):
+---
+---   * a port keeps the *name* of its last device even once that device is gone,
+---     so only `device` says whether anything is listening;
+---   * a port with no device swallows everything sent to it, silently.
+---
+--- Port 1 holds the emulated output; the other fifteen are empty, which is what
+--- makes "sending into the void" reproducible at a desk instead of on stage.
+local sim_device = { name = 'stagein-sim' }
+
+function sim_device:cc(cc, val, ch)
+  _host_midi_cc(ch or 1, cc, val)
 end
+
+function sim_device:note_on() end
+function sim_device:note_off() end
+
+midi.vports = {}
+for i = 1, 16 do
+  local port = {
+    port = i,
+    name = i == 1 and sim_device.name or 'none',
+    device = i == 1 and sim_device or nil,
+    connected = i == 1,
+  }
+  function port:cc(cc, val, ch)
+    if self.device then self.device:cc(cc, val, ch) end
+  end
+  function port:note_on(...)
+    if self.device then self.device:note_on(...) end
+  end
+  function port:note_off(...)
+    if self.device then self.device:note_off(...) end
+  end
+  midi.vports[i] = port
+end
+
+--- Returns the port itself, device or no device — exactly like matron.
+function midi.connect(n)
+  return midi.vports[n or 1]
+end
+
+--- Overridden by scripts to hear about hot-plugging. Nothing is ever plugged
+--- into the emulator, so these stay unused; they exist so the script's own
+--- handlers are installed over something real rather than into a nil.
+function midi.add(_) end
+function midi.remove(_) end
 
 osc = {}
 

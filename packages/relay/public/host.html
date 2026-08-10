@@ -357,6 +357,7 @@
                 <tr><td id="nXLabel">X</td><td id="nX">—</td></tr>
                 <tr><td id="nYLabel">Y</td><td id="nY">—</td></tr>
                 <tr><td>sortie</td><td id="nBackend">—</td></tr>
+                <tr><td>port MIDI</td><td id="nPort">—</td></tr>
                 <tr><td>refusés</td><td id="nRejected">—</td></tr>
               </table>
             </div>
@@ -549,7 +550,7 @@
         if (!n) {
           el('nState').textContent = 'jamais connecté';
           el('nPreset').textContent = el('nX').textContent = el('nY').textContent = '—';
-          el('nBackend').textContent = el('nRejected').textContent = '—';
+          el('nBackend').textContent = el('nPort').textContent = el('nRejected').textContent = '—';
           return;
         }
         el('nState').textContent = !n.online ? 'déconnecté' : n.killed ? 'KILLED' : n.armed ? 'ARMED' : 'idle';
@@ -557,6 +558,11 @@
         el('nX').textContent = `${n.ccX}`;
         el('nY').textContent = `${n.ccY}`;
         el('nBackend').textContent = n.midiBackend;
+        // Un port virtuel sans appareil derrière avale tout en silence : c'est la
+        // panne qu'on ne voit pas, donc on la nomme ici en rouge.
+        const port = n.midiPort;
+        el('nPort').textContent = port ? `${port.index} ${port.name}${port.live ? '' : ' — RIEN DERRIÈRE'}` : '—';
+        el('nPort').style.color = port && !port.live ? 'var(--danger)' : '';
         el('nRejected').textContent = n.rejected;
 
         const box = el('padview').getBoundingClientRect();

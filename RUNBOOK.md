@@ -56,7 +56,15 @@ mise run norns:config      # relay_ws_url, session, norns_token
 The deploy preflights the device first — ssh, `python3`, `setsid`, `~/dust/code`
 — and copies nothing if any of that is missing. A failure here is cheap.
 
-**4. Decide the two macros with the artist.** Defaults are CC 74 filter and
+**4. Choose the MIDI port on the device.** matron has sixteen virtual ports and
+sends to exactly one; a port with nothing behind it swallows every CC without a
+word. The script picks the lowest port that actually holds a device and names it
+in **PARAMS > midi out** (`1 MicroFreak`, `2 none`, `3 Launchpad (absent)` for a
+port that remembers a device no longer plugged in). Pick the instrument you mean:
+the lowest port is often a controller, not the synth. If the screen shows
+**NO MIDI OUT**, no port is mapped at all — map one in SYSTEM > DEVICES > MIDI.
+
+**5. Decide the two macros with the artist.** Defaults are CC 74 filter and
 CC 91 delay on channel 1, ranges 30–100 and 0–70. Change them from the host
 console or with E1/E3 on the device. **Never map the master volume.**
 
@@ -79,6 +87,7 @@ actually ruin an evening:
 | `relay is not answering` | nothing is running |
 | `the Norns is not connected` | the bridge is down — `mise run norns:logs` |
 | `a kill is still active` | left latched from last time; nothing will pass |
+| `nothing is behind MIDI port N` | the device is sending into an empty virtual port — silence all set |
 
 And it warns, without blocking, about the two silent failures:
 
@@ -86,6 +95,14 @@ And it warns, without blocking, about the two silent failures:
   nothing comes out. Press **K3**.
 - **the Norns is only logging MIDI** — same silence, different cause. Set
   `MIDI_BACKEND=midi` on the device.
+
+The device also reports which virtual port it sends through, so the preflight
+blocks on an empty one rather than leaving you to discover it. The same fact is
+visible in three other places: **NO MIDI OUT** across the bottom left of the
+device screen, *port MIDI* in the host console, and `NO MIDI OUT` in
+`mise run show:status --watch` — which is the one that catches an interface
+unplugged mid-set. A device running a script older than this reports no port at
+all; the preflight says so and asks for a redeploy rather than guessing.
 
 Then, with a phone in your hand, **scan the QR yourself and join once**. Nothing
 in this repository can prove a phone on the venue's network reaches the relay.
@@ -112,6 +129,12 @@ browser is buried behind a DAW.
 | open registrations | `mise run show:reopen` | K2 on the Norns |
 | draw a winner | `mise run show:draw --in 5` | K2 again, or the console |
 | stop everything | `mise run show:panic` | **space bar** in the console, **K3 double-tap** on the device |
+
+A draw that refuses now says why, on the device screen and in the console —
+*nobody entered*, or *no draw from ACTIVE* if a window is still running. You no
+longer have to reset the session to get another draw: the previous winner is
+skipped while somebody else is entered, and drawn again when they are the only
+one left, which is what happens in a rehearsal with one phone.
 
 The kill has three independent paths on purpose. The device one keeps working
 when the relay is gone; the relay one keeps working when the device screen is

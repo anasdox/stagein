@@ -446,7 +446,7 @@ hardcoded guess, so a rehearsal can settle them:
 
 | Question | Current default | Flag |
 | --- | --- | --- |
-| Can the winner re-enter the next draw? | no | `winnerCanRewin` |
+| Can the winner re-enter the next draw? | no, unless nobody else is entered | `winnerCanRewin` |
 | Is a pseudonym required to join? | a stage name is assigned, editable before joining | — |
 | Does the join link carry a key? | no — the bare domain, stable across restarts | `requireJoinKey` |
 | Are names moderated? | yes, in the relay; host can hide them all | `hideNames` |
@@ -454,3 +454,11 @@ hardcoded guess, so a rehearsal can settle them:
 | Which device and which CC for the pilot? | CC 74 filter, CC 91 delay, channel 1 | `macros.x` / `macros.y` |
 | Manual or automatic draw? | manual (host or K2), automatic redraw only after a no-show | `autoRedrawOnNoShow` |
 | Keep statistics between shows? | no — nothing is persisted | — |
+
+The re-win rule needs its one caveat spelled out, because a literal reading ends the show. Not
+letting the last winner win again means *not picking them over somebody else*; when they are the
+only one entered — a quiet room, or a rehearsal with a single phone — the exclusion steps aside
+rather than refusing every draw until someone resets the session. The moment a second person is
+entered, they are skipped again. The host journal says which of the two happened, and a draw that
+really cannot run (nobody entered, or the wrong session state) now answers on the device screen and
+in the console instead of leaving K2 looking like a dead key.

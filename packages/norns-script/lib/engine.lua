@@ -40,8 +40,15 @@ local REDRAW_HZ = 15
 --- A frame older than this never reaches the mapping stage (PRD §9.1).
 local MAX_FRAME_AGE_MS = 750
 local DOUBLE_TAP_MS = 350
+--- How long a message from the relay stays on the screen. Long enough to read
+--- from arm's length, short enough not to sit on top of the arm/kill banner.
+local NOTICE_MS = 3500
 
-local out = nil -- MIDI device
+-- The virtual port every value leaves through, and which one it is. matron hands
+-- out a port whether or not a device sits behind it, so `out` being non-nil
+-- proves nothing about anything hearing us — that is what port_live() is for.
+local out = nil
+local out_port = 1
 
 -- ---------------------------------------------------------------------------
 -- state
@@ -81,6 +88,8 @@ local s = {
   page = 1,
   k3_last_press = 0,
   kill_started_at = nil,
+  notice = nil, -- transient message from the relay
+  notice_until = nil,
 }
 
 --- Mirrors the relay's session config. Defaults match PRD §8 so the device is
@@ -144,7 +153,99 @@ end
 
 -- ---------------------------------------------------------------------------
 -- output
+--
+-- matron exposes sixteen virtual MIDI ports, mapped to whatever is plugged in
+-- from SYSTEM > DEVICES > MIDI. A port keeps the *name* of the last device that
+-- sat there long after that device is gone, so the name proves nothing: only
+-- `device` does, and `connected` is matron's own mirror of it. Sending to an
+-- empty port is a silent no-op inside norns' vport wrapper — every value
+-- accepted, mapped, displayed and dropped, which is the quietest way to lose a
+-- show.
 -- ---------------------------------------------------------------------------
+
+local function port_at(i)
+  return midi.vports and midi.vports[i] or nil
+end
+
+--- Is a device actually listening on port `i`? `gone` is the device matron is in
+--- the middle of removing, which it has not unmapped yet (see watch_devices).
+local function port_live(i, gone)
+  local port = port_at(i)
+  if not port then return false end
+  if gone and gone.port == i then return false end
+  return port.device ~= nil or port.connected == true
+end
+
+local function port_label(i, gone)
+  local port = port_at(i)
+  local name = (port and port.name) or 'none'
+  -- "never mapped" and "mapped to something that is not here" look identical in
+  -- a menu and sound identical on stage. Say which one this is.
+  if name ~= 'none' and not port_live(i, gone) then name = name .. ' (absent)' end
+  return string.format('%d %s', i, name)
+end
+
+local function port_labels(gone)
+  local names = {}
+  for i = 1, 16 do
+    names[i] = port_label(i, gone)
+  end
+  return names
+end
+
+--- Rewrite the option list in place, so the menu the operator scrolls through
+--- still tells the truth after something is plugged in or pulled out. matron
+--- copies the table it was given at add time, hence the lookup.
+local function refresh_port_labels(gone)
+  local param = params and params.lookup_param and params:lookup_param('midi_device')
+  if not param or not param.options then return end
+  local names = port_labels(gone)
+  for i = 1, 16 do
+    param.options[i] = names[i]
+  end
+end
+
+--- The lowest port with a device behind it, or 1 when nothing is plugged in yet.
+--- matron drops each device it finds into the lowest free port, so this is
+--- almost always 1 — and "almost always" is not a thing to discover on stage.
+local function first_live_port()
+  for i = 1, 16 do
+    if port_live(i) then return i end
+  end
+  return 1
+end
+
+local function connect_midi(index)
+  out = midi.connect(index)
+  out_port = index
+  -- The new port has never heard the current values. Marking both axes dirty
+  -- makes the next tick resend them, so a port change is audible immediately
+  -- instead of at the participant's next movement.
+  s.cc_x, s.cc_y = -1, -1
+  if port_live(index) then
+    log('info', 'midi out: ' .. port_label(index))
+  else
+    log('warn', 'midi out: ' .. port_label(index) .. ' — nothing mapped, no MIDI leaves the device')
+  end
+end
+
+--- matron calls these globals when a MIDI device appears or disappears, and
+--- resets them itself when it clears a script, so nothing leaks between scripts.
+--- Report, never re-route: quietly following whatever was just plugged in could
+--- send a participant's gestures to the wrong instrument, which is worse than
+--- the silence it would fix.
+local function watch_devices()
+  midi.add = function(dev)
+    -- matron has already re-mapped the ports by the time it calls this.
+    refresh_port_labels()
+    log('info', string.format('midi device %s — out is %s', tostring(dev and dev.name), port_label(out_port)))
+  end
+  midi.remove = function(dev)
+    -- It unmaps them *after* this one, hence passing the departing device along.
+    refresh_port_labels(dev)
+    log('warn', string.format('midi device %s unplugged — out is %s', tostring(dev and dev.name), port_label(out_port, dev)))
+  end
+end
 
 local function emit(macro, value, axis)
   if MIDI_BACKEND == 'osc' then
@@ -378,6 +479,11 @@ function relay_message(m)
     relay.send({ t = 'pong', id = m.id, ts = now_ms() })
   elseif t == 'error' then
     log('error', 'relay: ' .. tostring(m.code) .. ' ' .. tostring(m.message))
+    -- On stage the log is invisible. A refused K2 leaves the session state
+    -- untouched, which looks exactly like a key that did nothing, so put the
+    -- reason on the screen for a few seconds.
+    s.notice = tostring(m.message)
+    s.notice_until = now_ms() + NOTICE_MS
   end
 end
 
@@ -396,6 +502,15 @@ function relay_close()
   log('warn', 'relay disconnected — returning to safe values')
 end
 
+--- Where the output is going, for the host console and `show:preflight`. Sent as
+--- null under the OSC backend: no virtual port is involved there, and claiming
+--- an empty one would be a false alarm.
+local function port_status()
+  if MIDI_BACKEND == 'osc' then return json.null end
+  local port = port_at(out_port)
+  return { index = out_port, name = (port and port.name) or 'none', live = port_live(out_port) }
+end
+
 local function send_status()
   relay.send({
     t = 'status',
@@ -410,6 +525,7 @@ local function send_status()
       ccX = math.max(0, s.cc_x),
       ccY = math.max(0, s.cc_y),
       midiBackend = MIDI_BACKEND,
+      midiPort = port_status(),
       lastMessageAt = s.last_msg_at or json.null,
       rejected = s.rejected,
     },
@@ -437,6 +553,15 @@ local function push_intensity(pct)
 end
 
 local function add_params()
+  -- First, because nothing else matters if the output goes nowhere.
+  params:add({
+    id = 'midi_device',
+    name = 'midi out',
+    type = 'option',
+    options = port_labels(),
+    default = first_live_port(),
+    action = connect_midi,
+  })
   params:add({
     id = 'preset',
     name = 'preset',
@@ -563,7 +688,19 @@ local function draw_main()
     screen.text_right('IDLE')
   end
 
-  if s.rejected > 0 then
+  if s.notice and s.notice_until and now_ms() < s.notice_until then
+    -- Transient, so it takes the line: whatever it displaced comes back in a
+    -- few seconds, and the operator is looking at the screen right now.
+    screen.level(15)
+    screen.move(0, 62)
+    screen.text(s.notice:sub(1, 21))
+  elseif MIDI_BACKEND ~= 'osc' and not port_live(out_port) then
+    -- Nothing is behind the selected virtual port, so every CC is accepted and
+    -- thrown away. Silence is otherwise indistinguishable from working.
+    screen.level(15)
+    screen.move(0, 62)
+    screen.text('NO MIDI OUT')
+  elseif s.rejected > 0 then
     screen.level(3)
     screen.move(0, 62)
     screen.text('rej ' .. s.rejected)
@@ -579,13 +716,14 @@ local function draw_help()
   screen.line(128, 9)
   screen.stroke()
   screen.level(8)
+  -- Six lines: the seventh would be drawn on a y=67 baseline, off a 64 px screen.
   local lines = {
     'E1 preset   E2 duration',
     'E3 intensity',
-    'K1 page',
-    'K2 open / draw',
+    'K1 page   K2 open / draw',
     ARM_MODE == 'deadman' and 'K3 hold=ARM release=KILL' or 'K3 arm, 2x tap=KILL',
     'out: ' .. MIDI_BACKEND,
+    'port: ' .. port_label(out_port),
   }
   for i, line in ipairs(lines) do
     screen.move(0, 19 + (i - 1) * 8)
@@ -662,8 +800,9 @@ end
 -- ---------------------------------------------------------------------------
 
 function init()
-  out = midi.connect(1)
   add_params()
+  connect_midi(params:get('midi_device'))
+  watch_devices()
   if relay.start then relay.start() end
   s.out_x, s.out_y = safe_position()
   s.target_x, s.target_y = s.out_x, s.out_y

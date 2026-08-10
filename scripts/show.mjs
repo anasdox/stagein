@@ -206,6 +206,26 @@ async function preflight() {
           }
         }
 
+        // Which of matron's sixteen virtual ports the CC leaves through. A port
+        // with nothing behind it accepts every value and drops it, so this is
+        // total silence for the whole set, and no ritual step recovers it.
+        if (s.nornsOnline && s.norns && s.norns.midiBackend !== 'osc') {
+          const port = s.norns.midiPort;
+          if (!port) {
+            warn(
+              'the Norns has not reported a MIDI port',
+              'either it just connected, or its script predates this check — mise run norns:deploy',
+            );
+          } else if (!port.live) {
+            fail(
+              `nothing is behind MIDI port ${port.index} (${port.name})`,
+              'every CC is accepted and thrown away — pick a mapped port in PARAMS > midi out, or map one in SYSTEM > DEVICES > MIDI',
+            );
+          } else {
+            ok('MIDI port has a device behind it', `${port.index} ${port.name}`);
+          }
+        }
+
         if (['ACTIVE', 'AWARDED', 'DRAWING'].includes(s.state)) {
           warn(`the session is mid-ritual (${s.state})`, 'run mise run show:reopen to start clean');
         } else ok('session is idle and ready', s.state);
@@ -248,11 +268,16 @@ function statusLine(s) {
         ? `${Math.ceil(s.remainingMs / 1000)}s left`
         : '';
   const cc = s.norns ? `CC${s.config.macros.x.cc}=${String(s.norns.ccX).padStart(3)} CC${s.config.macros.y.cc}=${String(s.norns.ccY).padStart(3)}` : '';
+  // The same words the device screen uses: the CC values below are real, and
+  // they are going nowhere. Worth shouting about mid-set, when someone has just
+  // unplugged the interface.
+  const dead = s.nornsOnline && s.norns && s.norns.midiPort && !s.norns.midiPort.live ? `${R}NO MIDI OUT${O}` : '';
   const p95 = s.metrics.latencyP95 != null ? `p95 ${Math.round(s.metrics.latencyP95)}ms` : '';
   return [
     `${B}${s.state.padEnd(8)}${O}`,
     `${String(s.entrants).padStart(3)} in / ${String(s.connected).padStart(3)} online`,
     norns,
+    dead,
     s.winnerPseudo ? `${Y}${s.winnerPseudo}${O}` : '',
     timer,
     cc,

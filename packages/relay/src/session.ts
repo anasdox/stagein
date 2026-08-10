@@ -12,6 +12,7 @@ import {
   moderateName,
   sanitizePseudo,
   type EndReason,
+  type ErrorCode,
   type GrantView,
   type HostOut,
   type HostState,
@@ -337,17 +338,41 @@ export class LiveSession {
     this.touch();
   }
 
+  /**
+   * A draw that does not happen must say so. K2 on the device and the button in
+   * the console both leave the state untouched on refusal, which is
+   * indistinguishable from a draw that worked — a dead button on stage. The
+   * journal keeps the long version; the frame carries what fits on a 128 px
+   * screen.
+   */
+  private refuseDraw(code: ErrorCode, short: string, why: string): void {
+    this.note('warn', `draw refused: ${why}`);
+    const frame = { t: 'error' as const, code, message: short };
+    send(this.nornsSocket, frame satisfies NornsOut);
+    for (const ws of this.hostSockets) send(ws, frame satisfies HostOut);
+  }
+
   /** FR-05/FR-06: start the countdown. The winner is picked when it elapses. */
   draw(countdownMs?: number): void {
     if (this.state === 'ENDED') this.transition('OPEN', 'reopen before draw');
     if (this.state !== 'OPEN') {
-      this.note('warn', `cannot draw from ${this.state}`);
+      this.refuseDraw('bad_state', `no draw from ${this.state}`, `cannot draw from ${this.state}`);
       return;
     }
     const eligible = this.eligible();
     if (eligible.length === 0) {
-      this.note('warn', 'draw refused: no eligible participant');
+      const entered = this.connectedParticipants().filter((p) => p.entered).length;
+      this.refuseDraw(
+        'no_entrants',
+        entered === 0 ? 'nobody entered' : 'nobody to draw',
+        entered === 0 ? 'nobody has entered' : 'no eligible participant',
+      );
       return;
+    }
+    // Worth a line: the operator should know the exclusion was waived rather
+    // than wonder why the same person came up twice.
+    if (!this.config.winnerCanRewin && eligible.some((p) => p.clientId === this.lastWinnerClientId)) {
+      this.note('info', 'nobody else is entered — the previous winner is back in the draw');
     }
     const ms = clamp(countdownMs ?? 5_000, 0, 60_000);
     this.drawEndsAt = Date.now() + ms;
@@ -360,11 +385,15 @@ export class LiveSession {
    * the countdown started.
    */
   private eligible(): Participant[] {
-    return this.connectedParticipants().filter((p) => {
-      if (!p.entered) return false;
-      if (!this.config.winnerCanRewin && p.clientId === this.lastWinnerClientId) return false;
-      return true;
-    });
+    const entered = this.connectedParticipants().filter((p) => p.entered);
+    if (this.config.winnerCanRewin) return entered;
+    const others = entered.filter((p) => p.clientId !== this.lastWinnerClientId);
+    // The rule is "do not pick the last winner *over somebody else*". Taken
+    // literally it also ends the lottery whenever they are the only one left —
+    // one person in the room, or one phone at a rehearsal — and the only way
+    // out is a session reset. So the exclusion applies while there is somebody
+    // else to pick, and steps aside when there is not.
+    return others.length > 0 ? others : entered;
   }
 
   private award(now: number): void {
@@ -996,6 +1025,9 @@ function emptyNornsStatus(preset: string): NornsStatus {
     ccX: 0,
     ccY: 0,
     midiBackend: 'unknown',
+    // The device has not reported a status yet, so nothing is known about where
+    // its output goes. Not the same as knowing the port is empty.
+    midiPort: null,
     lastMessageAt: null,
     rejected: 0,
   };

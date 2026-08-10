@@ -97,6 +97,13 @@ export interface NornsStatus {
   ccX: number;
   ccY: number;
   midiBackend: string;
+  /**
+   * Which of matron's sixteen virtual ports the CC actually left through, and
+   * whether a device was behind it — a port with none swallows everything
+   * silently. Null when the device cannot say: an older script, or an OSC
+   * backend, where no port is involved. Null is *unknown*, never *empty*.
+   */
+  midiPort: { index: number; name: string; live: boolean } | null;
   lastMessageAt: number | null;
   /** Messages the Norns itself rejected (stale, unauthorised, out of order). */
   rejected: number;
@@ -239,6 +246,8 @@ export type ErrorCode =
   | 'revoked'
   | 'rate_limited'
   | 'bad_state'
+  /** A draw was asked for with nobody eligible to win it. */
+  | 'no_entrants'
   | 'blocked'
   | 'session_full'
   | 'server_error';

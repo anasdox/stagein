@@ -222,6 +222,7 @@ async function main() {
         ccX: 47,
         ccY: 52,
         midiBackend: 'midi',
+        midiPort: { index: 3, name: 'MicroFreak', live: true },
         lastMessageAt: Date.now(),
         rejected: 3,
       },
@@ -246,6 +247,12 @@ async function main() {
     );
     check('engine status crosses OSC → WS intact', seen.norns.ccX === 47 && seen.norns.ccY === 52, `CC ${seen.norns.ccX}/${seen.norns.ccY} rejected=${seen.norns.rejected}`);
     check('arm state propagates to the host console', seen.nornsArmed === true);
+    // The port is what show:preflight blocks on, so it has to survive the trip.
+    check(
+      'the MIDI port survives the trip',
+      seen.norns.midiPort?.index === 3 && seen.norns.midiPort?.name === 'MicroFreak' && seen.norns.midiPort?.live === true,
+      JSON.stringify(seen.norns.midiPort),
+    );
 
     // A device-side kill must reach the relay through the same path.
     await sendFromEngine({ t: 'kill' });

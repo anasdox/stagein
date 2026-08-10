@@ -7,7 +7,7 @@
  */
 
 import { clamp, clampInt } from './dsp';
-import type { HostIn, NornsIn, ParticipantIn } from './messages';
+import type { HostIn, NornsIn, NornsStatus, ParticipantIn } from './messages';
 import { LIMITS, PRESETS, applyPreset, type SessionConfig } from './session';
 
 export type Validated<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -156,6 +156,23 @@ export function validateHostIn(m: Record<string, unknown>): Validated<HostIn> {
   }
 }
 
+/**
+ * The MIDI port the device reports sending through. A script old enough not to
+ * know about ports simply omits it, which is not the same claim as "a port with
+ * nothing behind it" — so anything unreadable stays null and lets the preflight
+ * say "unknown" instead of crying wolf.
+ */
+function midiPort(v: unknown): NornsStatus['midiPort'] {
+  if (!isRecord(v)) return null;
+  const index = num(v.index);
+  if (index === null) return null;
+  return {
+    index: clampInt(index, 1, 16),
+    name: str(v.name, 32) ?? 'none',
+    live: Boolean(v.live),
+  };
+}
+
 export function validateNornsIn(m: Record<string, unknown>): Validated<NornsIn> {
   switch (m.t) {
     case 'hello': {
@@ -182,6 +199,7 @@ export function validateNornsIn(m: Record<string, unknown>): Validated<NornsIn> 
             ccX: clampInt(num(s.ccX) ?? 0, 0, 127),
             ccY: clampInt(num(s.ccY) ?? 0, 0, 127),
             midiBackend: str(s.midiBackend, 32) ?? 'log',
+            midiPort: midiPort(s.midiPort),
             lastMessageAt: num(s.lastMessageAt),
             rejected: Math.max(0, Math.trunc(num(s.rejected) ?? 0)),
           },
