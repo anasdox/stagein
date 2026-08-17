@@ -234,7 +234,37 @@ async function main() {
   await tick();
   check('the pad locks', doc.getElementById('pad').classList.contains('locked') === true);
   check('and the end screen is shown', activeScreen(doc) === 'ended', `showing "${activeScreen(doc)}"`);
-  check('offering the next draw', doc.getElementById('againBtn').textContent.includes('prochain'));
+  check(
+    'the next draw is not offered to someone still entered',
+    doc.getElementById('againBtn').style.display === 'none',
+    `display="${doc.getElementById('againBtn').style.display}"`,
+  );
+
+  // Playing does not take you out of the lottery, so the thank-you is a beat,
+  // not a destination: when the session reopens the phone says so again by
+  // itself, rather than waiting for a tap it never told anyone to make.
+  socket.deliver({ t: 'state', state: publicState({ state: 'ENDED', entrants: 1 }) });
+  await tick();
+  check('the thank-you holds while the session is ENDED', activeScreen(doc) === 'ended', `showing "${activeScreen(doc)}"`);
+
+  socket.deliver({ t: 'state', state: publicState({ state: 'OPEN', entrants: 1 }) });
+  await tick();
+  check(
+    'and the player is returned to the lottery when it reopens',
+    activeScreen(doc) === 'waiting',
+    `showing "${activeScreen(doc)}"`,
+  );
+
+  // A no-show is taken out of the draw, so the same reopen must land them on
+  // the join screen with the offer, not on "you are in the lottery".
+  socket.deliver({ t: 'entry', entered: false });
+  socket.deliver({ t: 'ended', reason: 'no_show' });
+  await tick();
+  check('a no-show is offered the next draw', doc.getElementById('againBtn').style.display !== 'none');
+  socket.deliver({ t: 'state', state: publicState({ state: 'OPEN', entrants: 0 }) });
+  await tick();
+  check('and lands back on the join screen', activeScreen(doc) === 'idle', `showing "${activeScreen(doc)}"`);
+
   check('exactly one screen visible throughout', activeCount(doc) === 1);
   check('no script errors during the whole flow', errors.length === 0, errors[0] ?? '');
 

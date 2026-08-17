@@ -555,7 +555,11 @@
         if (grant) return;
         if (state.state === 'DRAWING' && entered) show('drawing');
         else if (current === 'ended' || current === 'pad' || current === 'won') {
-          if (state.state === 'OPEN' && !entered) show('idle');
+          // Hold the thank-you for the relay's ENDED beat, then rejoin whatever
+          // is true. Winning does not take you out of the lottery, so somebody
+          // who just played is still in it — leaving them on "Terminé" until
+          // they thought to tap a button told them the opposite.
+          if (state.state === 'OPEN') show(entered ? 'waiting' : 'idle');
         } else show(entered ? 'waiting' : 'idle');
       }
 
@@ -625,6 +629,10 @@
         };
         el('endTitle').textContent = titles[reason] || 'Terminé.';
         el('endNote').textContent = notes[reason] || 'Le contrôle est revenu aux artistes.';
+        // Only offer the next draw to somebody who is actually out of it — a
+        // no-show, or someone who left. Offering it to a player who is still
+        // entered reads as "you are not in the lottery", which is false.
+        el('againBtn').style.display = entered ? 'none' : '';
         show('ended');
       }
 
