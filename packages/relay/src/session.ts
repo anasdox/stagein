@@ -486,6 +486,29 @@ export class LiveSession {
   }
 
   /** FR-13: tell the Norns to apply the safe behaviour, then land in ENDED. */
+  /**
+   * A winner who let the activation countdown run out leaves the lottery.
+   *
+   * `entered` means "I want the pad", and a missed countdown is the strongest
+   * evidence available that the phone is in a pocket. Leaving the flag set makes
+   * the automatic redraw pick the same absent person again — and when they are
+   * the only entrant, forever, because the re-win exclusion steps aside with
+   * nobody else to choose. Removing them converges instead: each no-show peels
+   * off one absent phone until the draw lands on somebody actually there.
+   *
+   * Only for `no_show`. Playing out the window, or having it revoked, says
+   * nothing about wanting the next one. One tap on their own phone re-enters.
+   */
+  private dropNoShow(): void {
+    // Null when the pool emptied during the countdown: no winner to remove.
+    const winner = this.winner();
+    if (!winner || !winner.entered) return;
+    winner.entered = false;
+    send(winner.socket, { t: 'entry', entered: false } satisfies ParticipantOut);
+    this.note('info', `no-show: ${winner.pseudo || winner.clientId} left the draw`);
+    this.touch();
+  }
+
   private endGrant(reason: EndReason): void {
     if (!this.grant) return;
     this.grant.revoked = true;
@@ -950,6 +973,7 @@ export class LiveSession {
     if (this.grant && !this.grant.revoked) {
       if (this.state === 'AWARDED' && now >= this.grant.activationDeadline) {
         this.note('warn', 'winner never touched the pad');
+        this.dropNoShow();
         this.endGrant('no_show');
         this.finishToEnded('no_show', now);
       } else if (this.state === 'ACTIVE' && this.grant.expiresAt !== null && now >= this.grant.expiresAt) {

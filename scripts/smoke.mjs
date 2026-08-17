@@ -699,6 +699,55 @@ async function main() {
   solo.close();
   rival.close();
 
+  // --- 8c. the no-show leaves the draw -------------------------------------
+  //
+  // The counterpart to 8b: the exclusion stepping aside for a lone entrant is
+  // what makes an absent one dangerous. A winner who ignores the countdown used
+  // to keep `entered` set, so the automatic redraw picked the same silent phone
+  // again — and with nobody else in the lottery, every seven seconds until
+  // somebody reset the session.
+  section('8c · a no-show leaves the draw');
+  host.send({ t: 'reset' });
+  await waitFor('reset before the no-show run', () => host.last('state')?.state.state === 'CLOSED');
+  host.send({ t: 'config', patch: { winnerCanRewin: false, activationTimeoutMs: 3000, autoRedrawOnNoShow: true } });
+  host.send({ t: 'open' });
+  await waitFor('open for the no-show run', () => host.last('state')?.state.state === 'OPEN');
+
+  const ghost = await joinAs('ghost');
+  await waitFor('the ghost entered', () => host.last('state')?.state.entrants >= 1);
+
+  ghost.clear();
+  host.send({ t: 'draw', countdownMs: 200 });
+  await waitFor('the ghost wins', () => ghost.last('won'), { timeout: 6000 });
+  // …and then does nothing at all, which is the whole point.
+  const lapsed = await waitFor('the activation window lapses', () => ghost.last('ended'), { timeout: 8000 });
+  check('the window ends as a no-show', lapsed.reason === 'no_show', lapsed.reason);
+
+  const dropped = await waitFor('the phone is told', () => ghost.all('entry').find((e) => e.entered === false), {
+    timeout: 4000,
+  });
+  check('the phone learns it left the draw', dropped?.entered === false);
+  await waitFor('the lottery empties', () => host.last('state')?.state.entrants === 0, { timeout: 6000 });
+  check('the no-show is no longer entered', host.last('state')?.state.entrants === 0);
+
+  // The redraw fires here. It must find nobody and say so, rather than
+  // re-picking the phone that just proved it is not being watched.
+  ghost.clear();
+  host.clear();
+  await sleep(9000);
+  check('the absent winner is not drawn again', ghost.all('won').length === 0, `${ghost.all('won').length} further wins`);
+  check(
+    'and the session comes to rest instead of looping',
+    ['OPEN', 'CLOSED'].includes(host.last('state')?.state.state),
+    host.last('state')?.state.state,
+  );
+
+  // Re-entering is one tap, and works.
+  ghost.send({ t: 'enter' });
+  await waitFor('the ghost can come back', () => host.last('state')?.state.entrants >= 1, { timeout: 4000 });
+  check('a no-show can re-enter the lottery', host.last('state')?.state.entrants >= 1);
+  ghost.close();
+
   // --- tidy up -------------------------------------------------------------
   section('9 · leave the stack usable');
   host.send({ t: 'reset' });

@@ -453,6 +453,7 @@ hardcoded guess, so a rehearsal can settle them:
 | Where does the pad start? | centre | `padStart` (`center` · `safe` · `last`) |
 | Which device and which CC for the pilot? | CC 74 filter, CC 91 delay, channel 1 | `macros.x` / `macros.y` |
 | Manual or automatic draw? | manual (host or K2), automatic redraw only after a no-show | `autoRedrawOnNoShow` |
+| Does a no-show stay in the lottery? | no — the countdown lapsing removes them | — |
 | Keep statistics between shows? | no — nothing is persisted | — |
 
 The re-win rule needs its one caveat spelled out, because a literal reading ends the show. Not
@@ -462,3 +463,12 @@ rather than refusing every draw until someone resets the session. The moment a s
 entered, they are skipped again. The host journal says which of the two happened, and a draw that
 really cannot run (nobody entered, or the wrong session state) now answers on the device screen and
 in the console instead of leaving K2 looking like a dead key.
+
+That caveat is also why a winner who lets the activation countdown lapse leaves the lottery.
+`entered` means *I want the pad*, and a missed countdown is the best evidence available that the
+phone is in a pocket — so with the exclusion standing aside for a lone entrant, keeping them
+registered had the automatic redraw pick the same absent person every seven seconds until somebody
+reset the session. Removing them converges instead: each no-show peels off one absent phone until
+the draw lands on someone who is actually there, and the room settles on *nobody entered* rather
+than spinning. Coming back is one tap on their own phone, and the relay tells it so the button is
+there to press.
