@@ -66,7 +66,16 @@ the lowest port is often a controller, not the synth. If the screen shows
 
 **5. Decide the two macros with the artist.** Defaults are CC 74 filter and
 CC 91 delay on channel 1, ranges 30–100 and 0–70. Change them from the host
-console or with E1/E3 on the device. **Never map the master volume.**
+console, or on the device: E1/E3 for the preset and the range, **PARAMS > x cc /
+y cc / midi channel** for the numbers themselves. **Never map the master
+volume.**
+
+Those values live in the relay, not in the Norns — the phones and the public view
+read the same config, so the device asks and the relay answers. Two consequences
+worth knowing at 2 a.m.: a value comes back on screen if the relay clamps or
+refuses it, and an edit with the relay down does nothing and says
+`offline: not applied`. The MIDI **port** is the one exception, because only the
+Norns knows what is plugged into it.
 
 ---
 

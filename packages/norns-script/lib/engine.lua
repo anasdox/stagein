@@ -108,6 +108,27 @@ local cfg = {
 --- rather than compounding on its own previous output.
 local base = { x = { min = 30, max = 100 }, y = { min = 0, max = 70 } }
 
+--- Mirror of PRESETS in packages/protocol/src/session.ts. The relay owns the
+--- list; this is only the order E1 scrolls through, so a name the relay knows
+--- and this table does not simply cannot be selected from the device.
+local PRESETS = { 'filter+delay', 'filter+reverb', 'texture+space' }
+
+local function preset_index(name)
+  for i, candidate in ipairs(PRESETS) do
+    if candidate == name then return i end
+  end
+  return nil
+end
+
+--- Intensity is stored nowhere: it *is* the fraction of the preset's own range
+--- the macros are allowed to cover, so it is read back from the ranges rather
+--- than remembered. x is the reference when a console has pushed the axes apart.
+local function intensity_pct()
+  local span = base.x.max - base.x.min
+  if span <= 0 then return 100 end
+  return math.floor((cfg.x.max - cfg.x.min) / span * 100 + 0.5)
+end
+
 -- ---------------------------------------------------------------------------
 -- mapping maths (mirror of packages/protocol/src/dsp.ts)
 -- ---------------------------------------------------------------------------
@@ -260,6 +281,16 @@ local function emit(macro, value, axis)
   if axis == 'x' then s.cc_x = value else s.cc_y = value end
 end
 
+local function last_cc(axis)
+  return axis == 'x' and s.cc_x or s.cc_y
+end
+
+--- engine_tick emits only when the mapped value changes, so anything that
+--- rewires the output has to say "state it again, whatever it is".
+local function mark_dirty(axis)
+  if axis == 'x' then s.cc_x = -1 else s.cc_y = -1 end
+end
+
 -- ---------------------------------------------------------------------------
 -- authorisation
 -- ---------------------------------------------------------------------------
@@ -279,6 +310,98 @@ local function authorised()
 end
 
 -- ---------------------------------------------------------------------------
+-- remote control
+--
+-- Every musical value except the MIDI port belongs to the relay: the phones and
+-- the public view read the same config, and the relay clamps it. So the device
+-- asks, it never decides — `cfg` moves when the relay echoes what it accepted,
+-- which is why a refused or clamped value comes back on the screen.
+--
+-- Asking is coalesced. One encoder detent is one patch and a spun encoder is
+-- dozens per second, while the relay charges every `config` frame to a 20/s
+-- token bucket (packages/relay/src/ws.ts) and drops the overflow without a
+-- word — and the frame it would drop is the last one, the value the operator
+-- settled on.
+-- ---------------------------------------------------------------------------
+
+--- Put a line on the screen for a few seconds. On stage the log is invisible.
+local function notify(message)
+  s.notice = tostring(message)
+  s.notice_until = now_ms() + NOTICE_MS
+end
+
+--- Time at rest before a patch leaves: long enough to swallow an encoder sweep,
+--- short enough that the console at the other end still feels immediate.
+local PATCH_REST_MS = 180
+--- And how long after an edit the screen keeps following the operator's hand.
+--- Without it, the echo of the patch sent two detents ago would snap the value
+--- backwards under their fingers.
+local EDIT_GRACE_MS = 600
+
+local patch_pending = nil
+local patch_at = nil
+local editing_until = nil
+local resync_wanted = false
+
+--- Deep, so a later macros.y.cc does not erase a macros.x.min still waiting in
+--- the same patch.
+local function merge_patch(dst, src)
+  for k, v in pairs(src) do
+    if type(v) == 'table' then
+      if type(dst[k]) ~= 'table' then dst[k] = {} end
+      merge_patch(dst[k], v)
+    else
+      dst[k] = v
+    end
+  end
+end
+
+local function queue_patch(patch)
+  patch_pending = patch_pending or {}
+  merge_patch(patch_pending, patch)
+  patch_at = now_ms()
+end
+
+local function flush_patch(force)
+  if not patch_pending then return end
+  if not force and now_ms() - (patch_at or 0) < PATCH_REST_MS then return end
+  relay.send({ t = 'config', patch = patch_pending })
+  patch_pending, patch_at = nil, nil
+end
+
+local function editing()
+  return editing_until ~= nil and now_ms() < editing_until
+end
+
+--- The operator changed something the relay owns. Offline there is nobody to
+--- ask, so the param drops back to the value actually in force and says why: a
+--- number quietly holding a value nothing uses is the same silent lie as a CC
+--- sent into an unmapped port.
+local function ask(patch, id, in_force)
+  editing_until = now_ms() + EDIT_GRACE_MS
+  if not s.online then
+    params:set(id, in_force, true)
+    notify('offline: not applied')
+    return
+  end
+  queue_patch(patch)
+end
+
+--- Read every relay-owned param back from the config the relay confirmed. All
+--- of them, every time: the one that gets forgotten is the one that ends up
+--- describing a value nothing is using. Silent, because a resync is not an
+--- operator's edit and must not bounce a patch back.
+local function resync_params()
+  local index = preset_index(cfg.preset)
+  if index then params:set('preset', index, true) end
+  params:set('duration', math.floor(cfg.control_ms / 1000 + 0.5), true)
+  params:set('intensity', intensity_pct(), true)
+  params:set('cc_x', cfg.x.cc, true)
+  params:set('cc_y', cfg.y.cc, true)
+  params:set('channel', cfg.x.channel, true)
+end
+
+-- ---------------------------------------------------------------------------
 -- engine
 -- ---------------------------------------------------------------------------
 
@@ -287,6 +410,14 @@ local function engine_tick()
   local dt = s.last_engine_at and (now - s.last_engine_at) / 1000 or 1 / ENGINE_HZ
   s.last_engine_at = now
   if dt > 0.25 then dt = 0.25 end -- a host stall must not become a jump
+
+  flush_patch()
+  -- Deferred rather than skipped: a resync dropped because the operator was
+  -- mid-turn would never come back, and the param would stay stale for good.
+  if resync_wanted and not editing() then
+    resync_params()
+    resync_wanted = false
+  end
 
   local tx, ty
   if authorised() then
@@ -358,14 +489,26 @@ local function apply_config(c)
     for _, axis in ipairs({ 'x', 'y' }) do
       local m = c.macros[axis]
       if m then
-        cfg[axis].name = m.name or cfg[axis].name
-        cfg[axis].cc = m.cc or cfg[axis].cc
-        cfg[axis].channel = m.channel or cfg[axis].channel
-        cfg[axis].min = m.min or cfg[axis].min
-        cfg[axis].max = m.max or cfg[axis].max
-        cfg[axis].safe = m.safe or cfg[axis].safe
-        cfg[axis].osc = m.osc or cfg[axis].osc
-        if m.invert ~= nil then cfg[axis].invert = m.invert end
+        local macro = cfg[axis]
+        -- Every preset moves at least one CC (protocol/src/session.ts: y goes
+        -- 91 -> 93, x goes 74 -> 71). The old pair is left holding the
+        -- participant's last value with nothing that will ever move it again,
+        -- so park it on safe while the old numbers are still here to address it.
+        local remapped = (m.cc and m.cc ~= macro.cc) or (m.channel and m.channel ~= macro.channel)
+        if remapped and last_cc(axis) >= 0 then
+          emit(macro, util.clamp(macro.safe, 0, 127), axis)
+        end
+
+        macro.name = m.name or macro.name
+        macro.cc = m.cc or macro.cc
+        macro.channel = m.channel or macro.channel
+        macro.min = m.min or macro.min
+        macro.max = m.max or macro.max
+        macro.safe = m.safe or macro.safe
+        macro.osc = m.osc or macro.osc
+        if m.invert ~= nil then macro.invert = m.invert end
+
+        if remapped then mark_dirty(axis) end
       end
     end
   end
@@ -375,11 +518,9 @@ local function apply_config(c)
     base.x.min, base.x.max = cfg.x.min, cfg.x.max
     base.y.min, base.y.max = cfg.y.min, cfg.y.max
     base.anchored = true
-    params:set('intensity', 100, true)
   end
 
-  -- Lua division always yields a float; matron's number param stores it as-is.
-  params:set('duration', math.floor(cfg.control_ms / 1000 + 0.5), true)
+  resync_wanted = true
 end
 
 local function apply_state(st)
@@ -482,8 +623,7 @@ function relay_message(m)
     -- On stage the log is invisible. A refused K2 leaves the session state
     -- untouched, which looks exactly like a key that did nothing, so put the
     -- reason on the screen for a few seconds.
-    s.notice = tostring(m.message)
-    s.notice_until = now_ms() + NOTICE_MS
+    notify(m.message)
   end
 end
 
@@ -536,8 +676,6 @@ end
 -- parameters, driven by the encoders
 -- ---------------------------------------------------------------------------
 
-local PRESETS = { 'filter+delay', 'filter+reverb', 'texture+space' }
-
 local function push_intensity(pct)
   -- Squeeze each macro range toward its own midpoint. 100 % = the preset's
   -- full authorised range, 0 % = a single value (no audible movement).
@@ -549,7 +687,7 @@ local function push_intensity(pct)
     patch.macros[axis].min = math.floor(mid - half + 0.5)
     patch.macros[axis].max = math.floor(mid + half + 0.5)
   end
-  relay.send({ t = 'config', patch = patch })
+  ask(patch, 'intensity', intensity_pct())
 end
 
 local function add_params()
@@ -570,7 +708,9 @@ local function add_params()
     default = 1,
     action = function(v)
       local name = PRESETS[v]
-      if name and name ~= cfg.preset then relay.send({ t = 'config', patch = { preset = name } }) end
+      if name and name ~= cfg.preset then
+        ask({ preset = name }, 'preset', preset_index(cfg.preset) or v)
+      end
     end,
   })
   params:add({
@@ -582,7 +722,7 @@ local function add_params()
     default = 30,
     action = function(v)
       if v * 1000 ~= cfg.control_ms then
-        relay.send({ t = 'config', patch = { controlDurationMs = v * 1000 } })
+        ask({ controlDurationMs = v * 1000 }, 'duration', math.floor(cfg.control_ms / 1000 + 0.5))
       end
     end,
   })
@@ -594,6 +734,46 @@ local function add_params()
     max = 100,
     default = 100,
     action = push_intensity,
+  })
+  -- Which CC and which channel is not a local preference: the same numbers are
+  -- what the host console shows and what the relay clamps. Reachable from here
+  -- because the console is on a laptop and this is in your hands.
+  params:add({
+    id = 'cc_x',
+    name = 'x cc',
+    type = 'number',
+    min = 0,
+    max = 127,
+    default = cfg.x.cc,
+    action = function(v)
+      if v ~= cfg.x.cc then ask({ macros = { x = { cc = v } } }, 'cc_x', cfg.x.cc) end
+    end,
+  })
+  params:add({
+    id = 'cc_y',
+    name = 'y cc',
+    type = 'number',
+    min = 0,
+    max = 127,
+    default = cfg.y.cc,
+    action = function(v)
+      if v ~= cfg.y.cc then ask({ macros = { y = { cc = v } } }, 'cc_y', cfg.y.cc) end
+    end,
+  })
+  -- One channel for both macros: one instrument, one channel. Splitting them
+  -- is a console decision, and this param then reports x.
+  params:add({
+    id = 'channel',
+    name = 'midi channel',
+    type = 'number',
+    min = 1,
+    max = 16,
+    default = cfg.x.channel,
+    action = function(v)
+      if v ~= cfg.x.channel or v ~= cfg.y.channel then
+        ask({ macros = { x = { channel = v }, y = { channel = v } } }, 'channel', cfg.x.channel)
+      end
+    end,
   })
 end
 
@@ -655,9 +835,15 @@ local function draw_main()
   screen.level(8)
   screen.move(0, 26)
   if s.session_state == 'DRAWING' then
-    screen.text('drawing ' .. fmt_secs(s.countdown_ms))
+    -- Seconds before the draw fires, the count is the number you announce.
+    screen.text(string.format('drawing %s  %d in', fmt_secs(s.countdown_ms), s.entrants))
   elseif s.winner then
     screen.text(s.winner .. ' ' .. fmt_secs(s.remaining_ms))
+  elseif s.session_state == 'OPEN' then
+    -- The lottery is filling. How many are in it is the one thing to know while
+    -- it does, and the `12/15` beside the state is too terse to read from a
+    -- stage — it is the dense operator readout, not the one you glance at.
+    screen.text(string.format('%d in the draw', s.entrants))
   else
     screen.text(cfg.preset)
   end
@@ -722,7 +908,7 @@ local function draw_help()
     'E3 intensity',
     'K1 page   K2 open / draw',
     ARM_MODE == 'deadman' and 'K3 hold=ARM release=KILL' or 'K3 arm, 2x tap=KILL',
-    'out: ' .. MIDI_BACKEND,
+    string.format('out: %s  ch %d', MIDI_BACKEND, cfg.x.channel),
     'port: ' .. port_label(out_port),
   }
   for i, line in ipairs(lines) do
@@ -817,6 +1003,8 @@ function init()
 end
 
 function cleanup()
+  -- The last edit may still be waiting out its rest window.
+  flush_patch(true)
   if relay.stop then relay.stop() end
   -- Never leave the rig on a participant's last value.
   local sx, sy = safe_position()

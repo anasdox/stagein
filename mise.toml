@@ -78,6 +78,10 @@ description = "Verify the Norns bundle is complete and deployable (no hardware n
 depends = ["build"]
 run = "node scripts/norns-check.mjs"
 
+[tasks."norns:engine-test"]
+description = "Drive the engine against relay frames: MIDI, patches, screen (no hardware)"
+run = "node scripts/norns-engine-test.mjs"
+
 [tasks."norns:bridge-test"]
 description = "Prove the device OSC↔WebSocket transport against a running relay"
 run = "node scripts/norns-bridge-test.mjs"
